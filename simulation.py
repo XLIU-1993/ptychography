@@ -51,7 +51,7 @@ obj_size = (1000e-6,1000e-6) # meter
 obj_nearfield = False # True/Flase
 
 # cam info
-cam_obj_distance = 30e-2 # meter
+cam_obj_distance = 10e-2 # meter
 cam_pxlsize = 13e-6 # meter
 
 '''
@@ -78,13 +78,13 @@ considered as zero, recommend to set the ratio as 2.
 as 2D gaussain has two sigma values, the minimum sigma value will be taken
 in case of an asymetric gaussian.
 '''
-probe_sigma_ratio = 2 
+probe_sigma_ratio = 1 
 probe_max_photonnb =  1e5
 probe_bg_photonnb = None
 
 # scan info
-scan_type_list = ['rect','spiral','spiral_fermat'] # do not change
-scan_type = scan_type_list[0]
+scan_type_list = ['rect','spiral'] # do not change
+scan_type = scan_type_list[1]
 '''
 scan_sigma_ratio*sigma_pxlnb will be taken as scan_step_pxlnb, scan_sigma_ratio 
 is recommended to set as 1*probe_sigma_ratio, thus we will have a recovering ratio
@@ -282,24 +282,6 @@ def spiral_archimedes(pas, nb):
     vt, vr = np.array(vt), np.array(vr)
     return np.round(vr * np.cos(vt)).astype(int), np.round(vr * np.sin(vt)).astype(int)
 
-def spiral_fermat(pas, nb):
-    """"
-    Creates a Fermat spiral with nb points distributed in a circular area with
-    diameter<= dmax. Returns the x,y coordinates of the spiral points. The average
-    distance between points can be roughly estimated as 0.5*dmax/(sqrt(nb/pi))
-
-    http://en.wikipedia.org/wiki/Fermat%27s_spiral
-    """
-    vr, vt = [], []
-    t = .4
-    goldenAngle = np.pi * (3 - np.sqrt(5))
-    while t < nb:
-        vr.append(pas * np.sqrt(t))
-        vt.append(t * goldenAngle)
-        t += 1
-    vt, vr = np.array(vt), np.array(vr)
-    return np.round(vr * np.cos(vt)).astype(int), np.round(vr * np.sin(vt)).astype(int)
-
 def make_scan(scan_type,scan_step_pxlnb,scan_nb):
     '''
     return a tuple of (xpos,ypos)
@@ -308,8 +290,6 @@ def make_scan(scan_type,scan_step_pxlnb,scan_nb):
         posx, posy = rect(scan_step_pxlnb,scan_nb)
     elif scan_type == 'spiral':
         posx, posy = spiral_archimedes(scan_step_pxlnb,scan_nb)
-    elif scan_type == 'spiral_fermat':
-        posx, posy = spiral_fermat(scan_step_pxlnb,scan_nb)
     return posx,posy
 
 def align_scan_obj(scan_position,obj_pxlnb,obj_pxlnb_pad,obj_pxllim):
@@ -589,7 +569,7 @@ dict_probeinfo={
 }
 
 dict_scaninfo={
-    'scan_type_list':scan_type_list, # list of str ['rect','spiral','spiral_fermat']
+    'scan_type_list':scan_type_list, # list of str ['rect','spiral']
     'scan_type':scan_type, # str
     'scan_step_pxlnb':scan_step_pxlnb, 
     'scan_nb':scan_nb,
