@@ -13,6 +13,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image,ImageOps
 import matplotlib.cm as cm
+import matplotlib.patches as mpatches
 
 # Saving files
 import os,sys,shutil,csv
@@ -385,24 +386,6 @@ def save_fromarray(array,path_dir_experiment,imagetitle):
     pattern = Image.fromarray(pattern)
     pattern.save(path)
 
-def make_showprobe_gauss_show(obj_pxlnb_pad,probe_shape_pxlnb,probe_sigma_ratio,probe_max_photonnb,center=(0,0)):
-    """
-    return a circularly masked 2D gaussian intensity distribution without rotation, centered at (0,0)
-    sigma is the sigma of an electric field in the form of: exp(-x2/sig2)
-    """
-    probe_sigma_pxlnb = probe_shape_pxlnb[0]//(2*probe_sigma_ratio),probe_shape_pxlnb[1]//(2*probe_sigma_ratio)
-    nx, ny = obj_pxlnb_pad
-    v = np.array(probe_sigma_pxlnb) ** 2
-
-    x = np.linspace(0, nx, nx)
-    y = np.linspace(0, ny, ny)
-    xx, yy = np.meshgrid(x, y)
-
-    mask_radius = int(probe_sigma_ratio*(np.array(probe_sigma_pxlnb).min()))
-    mask = np.sqrt((xx-center[0])**2+(yy-center[1])**2) < mask_radius
-    g = np.exp(-2*((xx-center[0])**2/(v[0])+(yy-center[1])**2/(v[1])))*mask
-    return g/g.sum()*probe_max_photonnb
-
 ##########################################################################################
 # premairy calculations and verification
 ##########################################################################################
@@ -533,18 +516,7 @@ ax31.imshow(np.abs(obj_pad),
             cmap='Greys_r',
             interpolation='nearest')
 
-new_sacn_nb = len(scan_position_align[0])
-scan_xposition_real = np.array(scan_position_align[0])*obj_pxlsize[0]
-scan_yposition_real = np.array(scan_position_align[1])*obj_pxlsize[1]
-colors = cm.rainbow(np.linspace(0, 1, new_sacn_nb))
-for idx in range(new_sacn_nb):
-    xi = scan_xposition_real[idx]
-    yi = scan_yposition_real[idx]
-    ci = colors[idx]
-    ax31.scatter(xi,yi,color=ci)
-
 ax32 = fig3.add_subplot(122)
-
 ax32.set_title('scan area')
 ax32.set_xlabel('meter')
 ax32.set_ylabel('meter')
@@ -553,22 +525,23 @@ ax32.imshow(np.abs(obj_pad),
             extent=[0,obj_pxlnb_pad[0]*obj_pxlsize[0],0,obj_pxlnb_pad[1]*obj_pxlsize[1]],
             cmap='Greys_r',
             interpolation='nearest')
+plt.pause(2)
+
+new_sacn_nb = len(scan_position_align[0])
+scan_xposition_real = np.array(scan_position_align[0])*obj_pxlsize[0]
+scan_yposition_real = np.array(scan_position_align[1])*obj_pxlsize[1]
+colors = cm.rainbow(np.linspace(0, 1, new_sacn_nb))
+circ_radius = np.array(probe_sigma_size).min()*probe_sigma_ratio
 
 for idx in range(new_sacn_nb):
-    xi = scan_position_align[0][idx]
-    yi = scan_position_align[1][idx]
-    probei_pad = make_showprobe_gauss_show(obj_pxlnb_pad,
-                                            probe_shape_pxlnb,
-                                            probe_sigma_ratio,
-                                            probe_max_photonnb,
-                                            center=(xi,yi))
+    xi = scan_xposition_real[idx]
+    yi = scan_yposition_real[idx]
+    ci = colors[idx]
+    ax31.scatter(xi,yi,color=ci)
 
-    ax32.imshow(probei_pad,
-                extent=[0,obj_pxlnb_pad[0]*obj_pxlsize[0],0,obj_pxlnb_pad[1]*obj_pxlsize[1]],                
-                cmap='Greys_r',
-                interpolation='nearest',
-                alpha=0.01,
-                )
+    circi = mpatches.Circle((xi,yi),radius=circ_radius,color=ci,fill=False)
+    ax32.add_patch(circi)
+    plt.pause(1)
 
 path_scan_image = path_dir_experiment + '\\scan_image.tiff'
 fig3.savefig(path_scan_image)
