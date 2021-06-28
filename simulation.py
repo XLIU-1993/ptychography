@@ -28,7 +28,7 @@ in order to perform a more reasonnable simulation of diffraction pattern.
 # fill in the blacnk
 ##########################################################################################
 # experiment log
-experiment_log ='''
+txt_readme ='''
 This is the first scrit that willed be used to
 simulate helix ptycho simulation.
 The logics seems to be good.
@@ -41,8 +41,10 @@ path_dir_working = sys.path[0]
 '''
 if only one path was given, it will generate a pure phase obj, in this case leave other path 'None'
 '''
-obj_path_ampimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype2_reduite.bmp'
-obj_path_phaseimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype6_2.bmp'
+#obj_path_ampimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype2_reduite.bmp'
+#obj_path_phaseimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype6_2.bmp'
+obj_path_ampimage = 'G:\\PYNX\\Test\\sample_obj.tif'
+obj_path_phaseimage = 'G:\\PYNX\\Test\\sample_phase.jpg'
 obj_size = (1000e-6,1000e-6) # meter
 obj_nearfield = False # True/Flase
 
@@ -339,8 +341,8 @@ def align_scan_obj(scan_position,obj_pxlnb,obj_pxlnb_pad,obj_pxllim):
 def make_dir(path_dir_working):
     current_time = time.strftime("%Y%m%d%H%M",time.localtime())
     path_dir_newsimulation = path_dir_working+'\\'+current_time+'_ptycho_simulation'
-    path_dir_experiment = path_dir_newsimulation+'\\01_experiment_simulation'
-    path_dir_diffraction = path_dir_newsimulation+'\\02_diffraction_patterns'
+    path_dir_experiment = path_dir_newsimulation+'\\simulation_info'
+    path_dir_diffraction = path_dir_newsimulation+'\\diffraction_patterns'
     folder_list = [
                     path_dir_newsimulation,
                     path_dir_experiment,
@@ -486,6 +488,17 @@ def save_patterns(path,intensity_temp,name):
     imagei = Image.fromarray(obj=intensity_temp.astype(np.uint16),
                             mode='I;16')
     imagei.save(file,'tiff')
+
+class NumpyEncoder(json.JSONEncoder):
+    """ Special json encoder for numpy types """
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
 ##########################################################################################
 # premairy calculations and verification
 ##########################################################################################
@@ -539,8 +552,8 @@ probe_bg = np.ones((probe_Ifield.shape))*probe_bg_photonnb
 
 # scan
 scan_step_pxlnb = np.array(probe_sigma_pxlnb).min()*scan_sigma_ratio
-scan_step_size = scan_step_pxlnb*obj_pxlsize
-print('scan_step_pxlnb',scan_step_pxlnb)
+scan_step_size = scan_step_pxlnb*obj_pxlsize[0]
+print('scan_step_pxlnb:',scan_step_pxlnb)
 print(f'scan_step_size:{scan_step_size:.3e} meter.')
 
 if scan_step_pxlnb >= np.array(obj_pxlnb).min():
@@ -666,6 +679,12 @@ new_scan_nb = len(scan_position_align[0])
 # scan position in meter with respect to obj
 scan_xposition_real = np.array(scan_position_align[0])*obj_pxlsize[0]
 scan_yposition_real = np.array(scan_position_align[1])*obj_pxlsize[1]
+scan_position_real = (scan_xposition_real,scan_yposition_real)
+# save real scan position
+path_scan_position = path_dir_experiment+'\\scan_position.csv'
+with open(path_scan_position,'w+',newline='') as filecsv:
+    filecsv_writer=csv.writer(filecsv,delimiter=',')
+    filecsv_writer.writerows(zip(*scan_position_real)) 
 # displaying colors
 colors = cm.rainbow(np.linspace(0, 1, new_scan_nb))
 # contour of the illumination area
@@ -766,7 +785,7 @@ dict_scaninfo_sup={
     'scan_step_size':scan_step_size, # meter
 }
 
-dict_info={
+dict_simulationinfo={
     'extra_info':dict_extrainfo,
     'obj_info':dict_objinfo,
     'obj_info_sup':dict_objinfo_sup,
@@ -776,3 +795,16 @@ dict_info={
     'scan_info_sup':dict_scaninfo_sup,
     'cam_info':dict_caminfo
 }
+
+# save simulation info
+path_simulationinfo = path_dir_experiment+'\\simulation_info.txt'
+txtfile = open(path_simulationinfo,'w+') 
+txt_simulationinfo = json.dumps(dict_simulationinfo,cls=NumpyEncoder)
+txtfile.write(txt_simulationinfo)
+txtfile.close()
+
+# save readme
+path_readme = path_dir_experiment+'\\readme.txt'
+txtfile = open(path_readme,'w+') 
+txtfile.write(txt_readme)
+txtfile.close()
