@@ -340,18 +340,18 @@ def align_scan_obj(scan_position,obj_pxlnb,obj_pxlnb_pad,obj_pxllim):
 
 def make_dir(path_dir_working):
     current_time = time.strftime("%Y%m%d%H%M",time.localtime())
-    path_dir_newsimulation = path_dir_working+'\\'+current_time+'_ptycho_simulation'
-    path_dir_experiment = path_dir_newsimulation+'\\simulation_info'
-    path_dir_diffraction = path_dir_newsimulation+'\\diffraction_patterns'
+    path_dir_simulation = path_dir_working+'\\'+current_time+'_ptycho_simulation'
+    path_dir_experiment = path_dir_simulation+'\\simulation_info'
+    path_dir_diffraction = path_dir_simulation+'\\diffraction_patterns'
     folder_list = [
-                    path_dir_newsimulation,
+                    path_dir_simulation,
                     path_dir_experiment,
                     path_dir_diffraction
                     ]
-    if os.path.exists(path_dir_newsimulation):
+    if os.path.exists(path_dir_simulation):
         print('simulation dir exist, clearing...')
-        for filename in os.listdir(path_dir_newsimulation):
-            file_path = os.path.join(path_dir_newsimulation, filename)
+        for filename in os.listdir(path_dir_simulation):
+            file_path = os.path.join(path_dir_simulation, filename)
             try:
                 if os.path.isfile(file_path) or os.path.islink(file_path):
                     os.unlink(file_path)
@@ -362,7 +362,7 @@ def make_dir(path_dir_working):
     else:
         for folder_path in folder_list:
             os.mkdir(folder_path)
-    return path_dir_newsimulation,path_dir_experiment,path_dir_diffraction
+    return path_dir_simulation,path_dir_experiment,path_dir_diffraction
 
 
 def save_fromarray(array,path_dir_experiment,imagetitle):
@@ -562,7 +562,7 @@ scan_position = make_scan(scan_type,scan_step_pxlnb,scan_nb)
 scan_position_align = align_scan_obj(scan_position,obj_pxlnb,obj_pxlnb_pad,obj_pxllim)
 
 # creat dir
-path_dir_newsimulation,path_dir_experiment,path_dir_diffraction = make_dir(path_dir_working)
+path_dir_simulation,path_dir_experiment,path_dir_diffraction = make_dir(path_dir_working)
 
 # show obj
 fig1 = plt.figure(tight_layout=True)
@@ -726,7 +726,7 @@ fig3.savefig(path_scan_image)
 plt.pause(2)
 
 dict_extrainfo={
-    'extra_path_workingdir':path_dir_working,
+    'extra_path_dirsimulation':path_dir_simulation,
 }
 
 dict_objinfo={
