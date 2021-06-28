@@ -33,9 +33,6 @@ This is the first scrit that willed be used to
 simulate helix ptycho simulation.
 The logics seems to be good.
 '''
-# displaying info
-show_image = True # True/Flase
-show_pattern_in_log = True # True/Flase
 
 # path info
 path_dir_working = sys.path[0]
@@ -485,13 +482,10 @@ def get_diffration(obj_pad,
     return I_wavefront
 
 def save_patterns(path,intensity_temp,name):
-    '''
-    
-    '''
     file = path+'\\'+str(name)+'.tiff'
-    #intensity_temp= (65535.0/intensity_temp.max()*(intensity_temp-intensity_temp.min())).astype(np.uint16)
-    imagei = Image.fromarray(intensity_temp)
-    imagei.save(file)
+    imagei = Image.fromarray(obj=intensity_temp.astype(np.uint16),
+                            mode='I;16')
+    imagei.save(file,'tiff')
 ##########################################################################################
 # premairy calculations and verification
 ##########################################################################################
@@ -524,6 +518,7 @@ obj_pxlnb_pad = obj_pad.shape
 obj_size_pad = obj_pxlsize[0]*obj_pxlnb_pad[0],obj_pxlsize[1]*obj_pxlnb_pad[1]
 print(f'obj_pxlnb_pad:{obj_pxlnb_pad}.')
 print(f'obj_size_pad:{obj_size_pad[0]:3e},{obj_size_pad[1]:3e} meter.')
+
 # probe
 '''
 calculate probe information
@@ -544,6 +539,10 @@ probe_bg = np.ones((probe_Ifield.shape))*probe_bg_photonnb
 
 # scan
 scan_step_pxlnb = np.array(probe_sigma_pxlnb).min()*scan_sigma_ratio
+scan_step_size = scan_step_pxlnb*obj_pxlsize
+print('scan_step_pxlnb',scan_step_pxlnb)
+print(f'scan_step_size:{scan_step_size:.3e} meter.')
+
 if scan_step_pxlnb >= np.array(obj_pxlnb).min():
     print('obj is smaller than one scan step')
 scan_position = make_scan(scan_type,scan_step_pxlnb,scan_nb)
@@ -663,16 +662,16 @@ image33 = ax33.imshow(cam_bg,
 plt.pause(2)
 
 # scan nb
-new_sacn_nb = len(scan_position_align[0])
+new_scan_nb = len(scan_position_align[0])
 # scan position in meter with respect to obj
 scan_xposition_real = np.array(scan_position_align[0])*obj_pxlsize[0]
 scan_yposition_real = np.array(scan_position_align[1])*obj_pxlsize[1]
 # displaying colors
-colors = cm.rainbow(np.linspace(0, 1, new_sacn_nb))
+colors = cm.rainbow(np.linspace(0, 1, new_scan_nb))
 # contour of the illumination area
 circ_radius = np.array(probe_sigma_size).min()*probe_sigma_ratio
 
-for idx in range(new_sacn_nb):
+for idx in range(new_scan_nb):
     # animation of scan position
     xi = scan_xposition_real[idx]
     yi = scan_yposition_real[idx]
@@ -706,11 +705,9 @@ path_scan_image = path_dir_experiment + '\\scan_image.tiff'
 fig3.savefig(path_scan_image)
 
 plt.pause(2)
-quit()
 
 dict_extrainfo={
-    'extra_path_workingdir':extra_path_workingdir,
-    'extra_path_simulationdir':extra_path_simulationdir,
+    'extra_path_workingdir':path_dir_working,
 }
 
 dict_objinfo={
@@ -718,8 +715,15 @@ dict_objinfo={
     'obj_path_phaseimage':obj_path_phaseimage,
     'obj_size':obj_size, # meter np.array((None,None))
     'obj_pxlsize':obj_pxlsize, # meter
-    'obj_pxlnb':obj_pxlnb, # np.array((None,None))
     'obj_nearfield':obj_nearfield, 
+}
+
+dict_objinfo_sup={
+    'obj_pxlsize':obj_pxlsize, # meter
+    'obj_pxlnb':obj_pxlnb, # np.array((None,None))
+    'obj_size':obj_size,
+    'obj_pxlnb_pad':obj_pxlnb_pad,
+    'obj_size_pad':obj_size_pad,
 }
 
 dict_caminfo={
@@ -738,18 +742,37 @@ dict_caminfo={
 dict_probeinfo={
     'probe_type_list':probe_type_list, # list
     'probe_type':probe_type, # str
-    'probe_shape_pxlnb':probe_shape_pxlnb, # idem camera_pxlnb
-    'probe_sigma_size':probe_sigma_size, # meter np.array((None,None))
     'probe_sigma_ratio':probe_sigma_ratio,
-    'probe_sigma_pxlnb':probe_sigma_pxlnb, # np.array((None,None))
     'probe_max_photonnb':probe_max_photonnb,
     'probe_bg_photonnb':probe_bg_photonnb,
     'probe_wavelength':probe_wavelength, # meter
 }
 
+dict_probeinfo_sup={
+    'probe_shape_pxlnb':probe_shape_pxlnb, # idem camera_pxlnb
+    'probe_sigma_pxlnb':probe_sigma_pxlnb, # np.array((None,None))
+    'probe_sigma_size':probe_sigma_size, # meter np.array((None,None))
+}
+
 dict_scaninfo={
     'scan_type_list':scan_type_list, # list of str ['rect','spiral']
     'scan_type':scan_type, # str
-    'scan_step_pxlnb':scan_step_pxlnb, 
-    'scan_nb':scan_nb,
+    'scan_sigma_ratio':scan_sigma_ratio, 
+    'scan_nb':new_scan_nb,
+}
+
+dict_scaninfo_sup={
+    'scan_step_pxlnb':scan_step_pxlnb,
+    'scan_step_size':scan_step_size, # meter
+}
+
+dict_info={
+    'extra_info':dict_extrainfo,
+    'obj_info':dict_objinfo,
+    'obj_info_sup':dict_objinfo_sup,
+    'probe_info':dict_probeinfo,
+    'probe_info_sup':dict_probeinfo_sup,
+    'scan_info':dict_scaninfo,
+    'scan_info_sup':dict_scaninfo_sup,
+    'cam_info':dict_caminfo
 }
