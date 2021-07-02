@@ -20,9 +20,35 @@ from ctypes import windll
 import json
 import time
 
-from scipy.ndimage import interpolation
 '''
-in order to perform a more reasonnable simulation of diffraction pattern.
+in the process of developing a gui for pynx, i found the simulation
+is not realistic, one can not simulate a real situation.
+in order to perform a more realistic simulation of diffraction pattern,
+some constrains are given here:
+firstly, i assume the camera takes the entire
+diffraction pattern originates from the probe which must have the same
+pixel numbers as the camera does.
+acrroding to the first assumption, the numerical aperture of the diffraction
+pattern is fixed by the distance between oobject and camera, and the size
+of the camera.
+one can hereby deduce, neither in far field or near field, the pixel size of
+the object, the pixel size of the object is the same for the one of the probe,
+then, the matrix that represents the probe has a certain form with a related
+real size.
+considering the fact that the divergence of the diffraction pattern is unknown, the
+distance between camera and object was set by one's experiences, we could
+specify a probe, like give a certain sigma size of a guassian distribution of 
+electric field. but it will leads to complecated calculations for the scanning
+pattern and we need to see how will the probe exceed the limited probe matrix.
+thus, in stead of giving a real size of the probe, only a ratio of the sigma
+pixel numbers which will be confined inside the probe matrix, will be 
+necessarily specified by the user.
+the ratio works good with the simulation, but i only did it for guassian.
+farthur more, in real experimence, the perfermence of camera is fatal, i added
+a virtual camera which has real parameters of an Andor M series camera.
+The effect of saturation will be clearly observed. Expect the case where given 
+a too much photon number will lead to valueError of np.poisson(). 
+simulation of diffraction pattern with a non symetric shape of camera is possible.
 '''
 ##########################################################################################
 # fill in the blacnk
@@ -39,17 +65,18 @@ path_dir_working = sys.path[0]
 
 # obj info
 '''
-if only one path was given, it will generate a pure phase obj, in this case leave other path 'None'
+if only one path was given, it will generate a pure phase obj,
+in this case leave other path as 'None'
 '''
-#obj_path_ampimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype2_reduite.bmp'
-#obj_path_phaseimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype6_2.bmp'
-obj_path_ampimage = 'G:\\PYNX\\Test\\sample_obj.tif'
-obj_path_phaseimage = 'G:\\PYNX\\Test\\sample_phase.jpg'
-obj_size = (1000e-6,1000e-6) # meter
+obj_path_ampimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype2_reduite.bmp'
+obj_path_phaseimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype6_2.bmp'
+#obj_path_ampimage = 'G:\\PYNX\\Test\\sample_obj.tif'
+#obj_path_phaseimage = 'G:\\PYNX\\Test\\sample_phase.jpg'
+obj_size = (13e-6,13e-6) # meter
 obj_nearfield = False # True/Flase
 
 # cam info
-cam_obj_distance = 10e-2 # meter
+cam_obj_distance = 20e-2 # meter
 cam_pxlsize = 13e-6 # meter
 '''
 the camera shape will influence the shape of gaussian,
@@ -70,12 +97,15 @@ probe_type_list = ['guass'] # do not change
 probe_type = probe_type_list[0]  
 probe_wavelength = 20e-9 #meter
 '''
-out of the aradius of probe_sigma_ratio*sigma_pxlnb_min, the intensity will be 
-considered as zero, recommend to set the ratio as 2.
-as 2D gaussain has two sigma values, the minimum sigma value will be taken
-in case of an asymetric gaussian.
+out of the radius of probe_sigma_ratio*probe_shape_pxlnb, 
+the intensity will be considered as zero, recommend to set the ratio as 
+(2,2), since gauss intensity distribution outside 2sigma is consider as 0.
+
+as long as the camera has an even shape, the probe_sigma_ratio should be 
+identical for 2 sides, otherwise, to make a symetric gauss, the ratio should
+be calculated by considering the ratio of the camera shape.
 '''
-probe_sigma_ratio = 1 
+probe_sigma_ratio = (1,1)
 probe_max_photonnb =  1e5
 probe_bg_photonnb = 1e2
 
@@ -83,14 +113,15 @@ probe_bg_photonnb = 1e2
 scan_type_list = ['rect','spiral'] # do not change
 scan_type = scan_type_list[1]
 '''
-scan_sigma_ratio*sigma_pxlnb will be taken as scan_step_pxlnb, scan_sigma_ratio 
-is recommended to set as 1*probe_sigma_ratio, thus we will have a recovering ratio
-of 50%.
-scan_sigma_ratio/probe_sigma_ratio     recovering ratio
-                0                           100%
-                2                            0%   
+scan_recover_ratio is define as the 
+scan_sigma_ratio*sigma_pxlnb.min() will be taken as scan_step_pxlnb.
+    scan_recover_ratio          scan_sigma_ratio
+            0                 2*probe_sigma_ratio.min()
+            0.5               1*probe_sigma_ratio.min()
+            1                 0*probe_sigma_ratio.min()
 '''
-scan_sigma_ratio = 1*probe_sigma_ratio 
+scan_recover_ratio = 0.5 # 0-1
+scan_sigma_ratio = (1-scan_recover_ratio)/0.5*np.array(probe_sigma_ratio).min()
 scan_nb = 100
 
 ##########################################################################################
@@ -124,34 +155,6 @@ def verify_array_memory(arrayshape,info='unknown'):
     except MemoryError:
         print(f'{info} with shape {arrayshape.shape} is too big! simulation stopped!')
         exit()
-
-'''
-# instead of simulating a probe with giving sigma value which leads to some overextend problems,
-# based on the assumption, that all light from probe matrix should be captured by the camera,
-# the properate radius of the probe will be calculated by the pixel size of the object and the 
-# pixel number of the camera.
-
-def calc_probe_sigma_pxlnb(probe_sigma_size,obj_pxlsize):
-    probe_sigma_pxlnb = np.array((probe_sigma_size[0]//obj_pxlsize,probe_sigma_size[1]//obj_pxlsize))
-    print(f'obj_pxlnb:{probe_sigma_pxlnb}')
-    return probe_sigma_pxlnb
-'''
-
-''' 
-# since the probe size will be calculated automatically, the probe size could be extremely small accroding the
-# size of the obj pixel and the number of camera pixel. 
-
-def verify_probe_sampling(probe_sigma_pxlnb,probe_sigma_ratio,cam_pxl_nb):
-    #1.check yourself if the probe_sigma_pxlnb was too low.
-    #2.ensure that intensity over 2sigma is still inside the oxl range.
-    if int(2*probe_sigma_ratio*probe_sigma_pxlnb[0]) > cam_pxl_nb or int(2*probe_sigma_ratio*probe_sigma_pxlnb[1]) > cam_pxl_nb:
-        print('camera pixels can not fully sample 2sigma of the probe!')
-        isYes = input('enter (y) to continue simulation with a truncated gaussian profil, others to stop simulation.')
-        if isYes.lower() == 'y':
-            pass
-        else:    
-            quit()
-'''
 
 def read_obj_image(obj_path_list):
     '''
@@ -213,7 +216,7 @@ def make_probe_gauss(probe_shape_pxlnb,probe_sigma_ratio,center=(0,0)):
     """
     return a circularly masked 2D gaussian electric field distribution without rotation, centered at (0,0)
     """
-    probe_sigma_pxlnb = probe_shape_pxlnb[0]//(2*probe_sigma_ratio),probe_shape_pxlnb[1]//(2*probe_sigma_ratio)
+    probe_sigma_pxlnb = probe_shape_pxlnb[0]//(2*probe_sigma_ratio[0]),probe_shape_pxlnb[1]//(2*probe_sigma_ratio[1])
     nx, ny = probe_shape_pxlnb
     v = np.array(probe_sigma_pxlnb) ** 2
 
@@ -537,9 +540,11 @@ print(f'obj_size_pad:{obj_size_pad[0]:3e},{obj_size_pad[1]:3e} meter.')
 calculate probe information
 '''
 probe_shape_pxlnb = cam_pxlnb
-probe_sigma_pxlnb = probe_shape_pxlnb[0]//(2*probe_sigma_ratio),probe_shape_pxlnb[1]//(2*probe_sigma_ratio)
+probe_shape_size = probe_shape_pxlnb[0]*obj_pxlsize[0],probe_shape_pxlnb[1]*obj_pxlsize[1]
+probe_sigma_pxlnb = probe_shape_pxlnb[0]//(2*probe_sigma_ratio[0]),probe_shape_pxlnb[1]//(2*probe_sigma_ratio[1])
 probe_sigma_size = probe_sigma_pxlnb[0]*obj_pxlsize[0],probe_sigma_pxlnb[1]*obj_pxlsize[1]
 print(f'probe_shape_pxlnb:{probe_shape_pxlnb}.')
+print(f'probe_shape_size is:{probe_shape_size[0]:.3e},{probe_shape_size[1]:.3e} meter.')
 print(f'probe_sigma_pxlnb:{probe_sigma_pxlnb}.')
 print(f'probe_sigma_size is:{probe_sigma_size[0]:.3e},{probe_sigma_size[1]:.3e} meter.')
 
@@ -688,7 +693,7 @@ with open(path_scan_position,'w+',newline='') as filecsv:
 # displaying colors
 colors = cm.rainbow(np.linspace(0, 1, new_scan_nb))
 # contour of the illumination area
-circ_radius = np.array(probe_sigma_size).min()*probe_sigma_ratio
+circ_radius = np.array(probe_sigma_size).min()*np.array(probe_sigma_ratio).min()
 
 for idx in range(new_scan_nb):
     # animation of scan position
@@ -769,6 +774,7 @@ dict_probeinfo={
 
 dict_probeinfo_sup={
     'probe_shape_pxlnb':probe_shape_pxlnb, # idem camera_pxlnb
+    'probe_shape_size':probe_shape_size, # meter
     'probe_sigma_pxlnb':probe_sigma_pxlnb, # np.array((None,None))
     'probe_sigma_size':probe_sigma_size, # meter np.array((None,None))
 }
@@ -776,7 +782,7 @@ dict_probeinfo_sup={
 dict_scaninfo={
     'scan_type_list':scan_type_list, # list of str ['rect','spiral']
     'scan_type':scan_type, # str
-    'scan_sigma_ratio':scan_sigma_ratio, 
+    'scan_recover_ratio':scan_recover_ratio, 
     'scan_nb':new_scan_nb,
 }
 
@@ -797,8 +803,8 @@ dict_simulationinfo={
 }
 
 # save simulation info
-path_simulationinfo = path_dir_experiment+'\\simulation_info.txt'
-txtfile = open(path_simulationinfo,'w+') 
+path_simulation_info = path_dir_experiment+'\\simulation_info.txt'
+txtfile = open(path_simulation_info,'w+') 
 txt_simulationinfo = json.dumps(dict_simulationinfo,cls=NumpyEncoder)
 txtfile.write(txt_simulationinfo)
 txtfile.close()
