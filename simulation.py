@@ -72,18 +72,18 @@ obj_path_ampimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_
 obj_path_phaseimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype6_2.bmp'
 #obj_path_ampimage = 'G:\\PYNX\\Test\\sample_obj.tif'
 #obj_path_phaseimage = 'G:\\PYNX\\Test\\sample_phase.jpg'
-obj_size = (13e-6,13e-6) # meter
+obj_size = (18e-6,13e-6) # meter
 obj_nearfield = False # True/Flase
 
 # cam info
-cam_obj_distance = 20e-2 # meter
-cam_pxlsize = 13e-6 # meter
+cam_obj_distance = 339e-6 # meter
+cam_pxlsize = 52e-6 # meter
 '''
 the camera shape will influence the shape of gaussian,
 recommend to define an square shape camera, which will be less
 problematic.
 '''
-cam_pxlnb = (512,512)
+cam_pxlnb = (256,256)
 cam_binning = 1
 cam_qe = 0.02
 cam_dark_noise = 2.9 # e-
@@ -95,7 +95,7 @@ cam_baseline = 100
 # probe info
 probe_type_list = ['guass'] # do not change
 probe_type = probe_type_list[0]  
-probe_wavelength = 20e-9 #meter
+probe_wavelength = 420e-9 #meter
 '''
 out of the radius of probe_sigma_ratio*probe_shape_pxlnb, 
 the intensity will be considered as zero, recommend to set the ratio as 
@@ -105,13 +105,13 @@ as long as the camera has an even shape, the probe_sigma_ratio should be
 identical for 2 sides, otherwise, to make a symetric gauss, the ratio should
 be calculated by considering the ratio of the camera shape.
 '''
-probe_sigma_ratio = (1,1)
-probe_max_photonnb =  1e5
-probe_bg_photonnb = 1e2
+probe_sigma_ratio = (20,20)
+probe_max_photonnb =  1e4
+probe_bg_photonnb = 200
 
 # scan info
 scan_type_list = ['rect','spiral'] # do not change
-scan_type = scan_type_list[1]
+scan_type = scan_type_list[0]
 '''
 scan_recover_ratio is define as the 
 scan_sigma_ratio*sigma_pxlnb.min() will be taken as scan_step_pxlnb.
@@ -120,7 +120,7 @@ scan_sigma_ratio*sigma_pxlnb.min() will be taken as scan_step_pxlnb.
             0.5               1*probe_sigma_ratio.min()
             1                 0*probe_sigma_ratio.min()
 '''
-scan_recover_ratio = 0.5 # 0-1
+scan_recover_ratio = 0.60 # 0-1
 scan_sigma_ratio = (1-scan_recover_ratio)/0.5*np.array(probe_sigma_ratio).min()
 scan_nb = 100
 
@@ -166,7 +166,7 @@ def read_obj_image(obj_path_list):
             try:
                 obj_image_list.append(ImageOps.grayscale(Image.open(obj_image_path)))
             except FileNotFoundError:
-                print(f'{obj_image_path} is not found, please follow constructions, dont play with me :), simulation stopped!')
+                print(f'{obj_image_path} is not found, simulation stopped!')
     return obj_image_list
 
 def resize_obj_image(obj_image_list,obj_pxlnb):
@@ -234,11 +234,16 @@ def get_probe_gauss_intensity(probe_efield,probe_max_photonnb=1,probe_bg_photonn
     probe_ifield = probe_efield**2
     return (probe_ifield/probe_ifield.max())*probe_max_photonnb+probe_bg_photonnb
 
-def rect(pas,nb):
+def rect(pas,nb,obj_size):
     '''
     creat a matrix of the most possible rectangular, return
     the x,y position sucessively.
     '''
+    obj_xpxlnb = obj_size[0]
+    obj_ypxlnb = obj_pxlnb[1]
+
+
+    
     square_longth = int(np.sqrt(nb))
     residu_nb = nb-square_longth**2
     if residu_nb%square_longth == 0 :
@@ -450,17 +455,17 @@ class cameraADconvertor():
         self.light += self.baseline
         self.light[self.light>max_depth] = max_depth
 
-def make_diffraction(obj_pad,probe_Efield,scan_position_align):
+def make_edffraction(obj_pad,probe_Efield,scan_position_align):
     obj_xpxlnb,obj_ypxlnb = obj_pad.shape
     probe_shape_xpxlnb,probe_shape_ypxlnb = probe_Efield.shape
     scan_xposition, scan_yposition = scan_position_align
-    x0 = scan_xposition-probe_shape_xpxlnb//2
-    y0 = scan_yposition-probe_shape_ypxlnb//2
+    x0 = int(scan_xposition-probe_shape_xpxlnb//2)
+    y0 = int(scan_yposition-probe_shape_ypxlnb//2)
     if x0<0 or y0<0 or x0+probe_shape_xpxlnb>obj_xpxlnb or y0+probe_shape_ypxlnb>obj_ypxlnb:
         print('OVER RANGE at scan position(pixels):',scan_xposition,scan_yposition)
     return probe_Efield*obj_pad[x0:x0+probe_shape_xpxlnb,y0:y0+probe_shape_ypxlnb]
 
-def get_diffration(obj_pad,
+def make_diffration(obj_pad,
                     probe_Efield,
                     scan_position_align,
                     cam,
@@ -471,7 +476,7 @@ def get_diffration(obj_pad,
                     probe_max_photonnb,
                     probe_bg_photonnb
                     ):
-    E_diffracted = make_diffraction(obj_pad,probe_Efield,scan_position_align)
+    E_diffracted = make_edffraction(obj_pad,probe_Efield,scan_position_align)
     E_wavefront = Wavefront(d=np.fft.fftshift(E_diffracted), 
                             wavelength=probe_wavelength,
                             pixel_size=obj_pxlsize)
@@ -708,7 +713,7 @@ for idx in range(new_scan_nb):
 
     # animation of diffraction pattern
     scan_iposition_align = scan_position_align[0][idx],scan_position_align[1][idx]
-    intensity_temp = get_diffration(obj_pad,
+    intensity_temp = make_diffration(obj_pad,
                                 probe_Efield,
                                 scan_iposition_align,
                                 cam,
