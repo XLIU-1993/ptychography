@@ -73,10 +73,10 @@ path_dir_working = sys.path[0]
 if only one path was given, it will generate a pure phase obj,
 in this case leave other path as 'None'
 '''
-obj_path_ampimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype2_reduite.bmp'
-obj_path_phaseimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype6_2.bmp'
-#obj_path_ampimage = 'G:\\PYNX\\Test\\sample_obj.tif'
-#obj_path_phaseimage = 'G:\\PYNX\\Test\\sample_phase.jpg'
+#obj_path_ampimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype2_reduite.bmp'
+#obj_path_phaseimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype6_2.bmp'
+obj_path_ampimage = 'G:\\PYNX\\Test\\sample_obj.tif'
+obj_path_phaseimage = 'G:\\PYNX\\Test\\sample_phase.jpg'
 obj_size = (18e-6,13e-6) # meter (xsize,ysize)
 obj_nearfield = False # True/Flase
 
@@ -111,7 +111,7 @@ identical for 2 sides, otherwise, to make a symetric gauss, the ratio should
 be calculated by considering the ratio of the camera shape.
 '''
 probe_sigma_ratio = (4,4) #(x_ratio,y_ratio)
-probe_max_photonnb =  1e5
+probe_max_photonnb =  1e6
 probe_bg_photonnb = 20
 
 # scan info
@@ -132,7 +132,7 @@ scan_sigma_ratio*sigma_pxlnb.min() will be taken as scan_step_pxlnb.
 '''
 scan_recover_ratio = 0.60 # 0-1
 scan_sigma_ratio = (1-scan_recover_ratio)/0.5*np.array(probe_sigma_ratio).min()
-scan_nb = 100
+scan_nb = 10
 
 ##########################################################################################
 # define functions
@@ -215,17 +215,17 @@ def pad_obj(obj,cam_pxlnb):
     obj_ypxlnb_pad = obj_ypxlnb + cam_ypxlnb + 4
     verify_array_memory((obj_xpxlnb_pad,obj_ypxlnb_pad),info='obj_pad')
     obj_pad = np.zeros((obj_xpxlnb_pad,obj_ypxlnb_pad),dtype=np.complex)
-    left = cam_xpxlnb//2+2
-    bottom = cam_ypxlnb//2+2
+    left = cam_ypxlnb//2+2
+    bottom = cam_xpxlnb//2+2
     obj_pxllim = left,bottom
-    obj_pad[left:left+obj_xpxlnb,bottom:bottom+obj_ypxlnb] = obj[::]
+    obj_pad[bottom:bottom+obj_xpxlnb,left:left+obj_ypxlnb] = obj[::]
     return obj_pad,obj_pxllim
 
 def make_probe_gauss(probe_shape_pxlnb,probe_sigma_ratio,center=(0,0)):
     """
     return a circularly masked 2D gaussian electric field distribution without rotation, centered at (0,0)
     """
-    probe_sigma_pxlnb = probe_shape_pxlnb[0]//(2*probe_sigma_ratio[0]),probe_shape_pxlnb[1]//(2*probe_sigma_ratio[1])
+    probe_sigma_pxlnb = probe_shape_pxlnb[1]//(2*probe_sigma_ratio[0]),probe_shape_pxlnb[0]//(2*probe_sigma_ratio[1])
     row, column = probe_shape_pxlnb
     v = np.array(probe_sigma_pxlnb) ** 2
 
@@ -340,8 +340,8 @@ def align_scan_obj(scan_position,obj_pxlnb,obj_pxlnb_pad,obj_pxllim):
     scanypos = scanypos+objymid
 
     left,bottom = obj_pxllim
-    right = left + obj_pxlnb[0]
-    top = bottom + obj_pxlnb[1]
+    right = left + obj_pxlnb[1]
+    top = bottom + obj_pxlnb[0]
 
     scanxpos_temp = []
     scanypos_temp = []
@@ -468,14 +468,14 @@ class cameraADconvertor():
         self.light[self.light>max_depth] = max_depth
 
 def make_edffraction(obj_pad,probe_Efield,scan_position_align):
-    obj_xpxlnb,obj_ypxlnb = obj_pad.shape
+    obj_rowpxlnb,obj_colunmpxlnb = obj_pad.shape
     probe_shape_xpxlnb,probe_shape_ypxlnb = probe_Efield.shape
     scan_xposition, scan_yposition = scan_position_align
-    x0 = int(scan_xposition-probe_shape_xpxlnb//2)
-    y0 = int(scan_yposition-probe_shape_ypxlnb//2)
-    if x0<0 or y0<0 or x0+probe_shape_xpxlnb>obj_xpxlnb or y0+probe_shape_ypxlnb>obj_ypxlnb:
+    x0 = int(scan_xposition-probe_shape_ypxlnb//2)
+    y0 = int(scan_yposition-probe_shape_xpxlnb//2)
+    if x0<0 or y0<0 or x0+probe_shape_ypxlnb>obj_colunmpxlnb or y0+probe_shape_xpxlnb>obj_rowpxlnb:
         print('OVER RANGE at scan position(pixels):',scan_xposition,scan_yposition)
-    return probe_Efield*obj_pad[x0:x0+probe_shape_xpxlnb,y0:y0+probe_shape_ypxlnb]
+    return probe_Efield*obj_pad[y0:y0+probe_shape_xpxlnb,x0:x0+probe_shape_ypxlnb]
 
 def make_diffration(obj_pad,
                     probe_Efield,
@@ -520,101 +520,15 @@ class NumpyEncoder(json.JSONEncoder):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
 
-class cross_lines():
+def get_saturation(data,cam_bitdepth):
     '''
-    Build two cross lines in the middle of the given ax, and plot
-    two normalized cross sections. The cross lines are not pickable,
-    use firstly init_plot() to init the cross section plots, then
-    use update_data() to update the cross section data, plot can be updated
-    by calling ax.figure.canvas.draw_idle().
+    return the percentage of saturation
     '''
-    def __init__(self,ax):
-        self.ax = ax
-        self.make_line()
-    
-    def make_line(self):
-        divider = make_axes_locatable(self.ax)
-        self.h_ax = divider.append_axes('top',0.2,pad=0.2,sharex=self.ax)
-        self.v_ax = divider.append_axes('right',0.2,pad=0.2,sharey=self.ax)
-        self.h_ax.xaxis.set_tick_params(labelbottom=False)
-        self.v_ax.yaxis.set_tick_params(labelleft=False)
-        self.h_ax.set_ylim(top=1.05)
-        self.v_ax.set_xlim(right=1.05)
-        xmin, xmax = self.ax.get_xlim()
-        ymin, ymax = self.ax.get_ylim()
-        h_mid = int((xmin + xmax)/2)
-        v_mid = int((ymin + ymax)/2)
-        h_line = lines.Line2D([xmin, xmax], 
-                            [h_mid, h_mid], 
-                            color='g', 
-                            linestyle='--', 
-                            pickradius=5)
-        self.ax.add_line(h_line)
-        v_line = lines.Line2D([v_mid, v_mid], 
-                            [ymin, ymax], 
-                            color='r', 
-                            linestyle='--',
-                            pickradius=5)
-        self.ax.add_line(v_line)
-    
-    def init_plot(self,data):
-        row,colunm = data.shape
-        v_data = data[:,int(colunm/2)]
-        v_data = self.normalize_data(v_data)
-        h_data = data[int(row/2),:]
-        h_data = self.normalize_data(h_data)
-        self.v_cross, = self.v_ax.plot(v_data,np.arange(row), 'r-')
-        self.h_cross, = self.h_ax.plot(np.arange(colunm),h_data,'g-')
-    
-    def update_data(self,data):
-        row,colunm = data.shape
-        v_data = data[:,int(colunm/2)]
-        v_data = self.normalize_data(v_data)
-        h_data = data[int(row/2),:]
-        h_data = self.normalize_data(h_data)
-        self.v_cross.set_xdata(v_data)
-        self.h_cross.set_ydata(h_data)
-
-    def normalize_data(self, data):
-        min_temp = np.min(data)
-        max_temp = np.max(data)
-        if min_temp != max_temp:
-            return (data-min_temp)/(max_temp-min_temp)
-        else:
-            return 1
-
-def add_cross(ax):
-    '''
-    add a cross at the center of the ax
-    '''
-    xmin, xmax = ax.get_xlim()
-    ymin, ymax = ax.get_ylim()
-    print(xmin, xmax)
-    h_mid = int((xmin + xmax)/2)
-    v_mid = int((ymin + ymax)/2)
-    h_line = lines.Line2D([xmin, xmax], 
-                        [h_mid, h_mid], 
-                        color='g', 
-                        linestyle='--')
-    ax.add_line(h_line)
-    v_line = lines.Line2D([v_mid, v_mid], 
-                        [ymin, ymax], 
-                        color='r', 
-                        linestyle='--')
-    ax.add_line(v_line)
-    ax.figure.canvas.draw_idle()
-
-def normalize_data(data):
-    '''
-    normalize line data from cross section.
-    '''
-    min_temp = np.min(data)
-    max_temp = np.max(data)
-    if min_temp != max_temp:
-        return (data-min_temp)/(max_temp-min_temp)
-    else:
-        return np.ones(len(data))
-
+    x,y=data.shape
+    pxlnb = x*y
+    max_photon = 2**cam_bitdepth-1
+    cam_sat_pxlnb = np.count_nonzero(data==max_photon)
+    return cam_sat_pxlnb/pxlnb*100
 ##########################################################################################
 # premairy calculations and verification
 ##########################################################################################
@@ -625,7 +539,7 @@ of np.array
 '''
 obj_pxlsize = calc_obj_pxlsize(probe_wavelength,cam_obj_distance,cam_pxlnb,cam_pxlsize,obj_nearfield) #meter
 obj_pxlnb = calc_obj_pxlnb(obj_size,obj_pxlsize)
-obj_size = obj_pxlsize[0]*obj_pxlnb[1],obj_pxlsize[1]*obj_pxlnb[0]
+obj_size = obj_pxlsize[0]*obj_pxlnb[1],obj_pxlsize[1]*obj_pxlnb[0] # width height
 print(f'obj_pxlsize:{obj_pxlsize[0]:.3e},{obj_pxlsize[1]:.3e} meter.')
 print(f'obj_pxlnb:{obj_pxlnb}.')
 print(f'obj_size:{obj_size[0]:3e},{obj_size[1]:3e} meter.')
@@ -644,7 +558,7 @@ pad the obj
 '''
 obj_pad,obj_pxllim = pad_obj(obj,cam_pxlnb)
 obj_pxlnb_pad = obj_pad.shape
-obj_size_pad = obj_pxlsize[0]*obj_pxlnb_pad[1],obj_pxlsize[1]*obj_pxlnb_pad[0]
+obj_size_pad = obj_pxlsize[0]*obj_pxlnb_pad[1],obj_pxlsize[1]*obj_pxlnb_pad[0] # width height
 print(f'obj_pxlnb_pad:{obj_pxlnb_pad}.')
 print(f'obj_size_pad:{obj_size_pad[0]:3e},{obj_size_pad[1]:3e} meter.')
 
@@ -653,9 +567,9 @@ print(f'obj_size_pad:{obj_size_pad[0]:3e},{obj_size_pad[1]:3e} meter.')
 calculate probe information
 '''
 probe_shape_pxlnb = cam_pxlnb
-probe_shape_size = probe_shape_pxlnb[1]*obj_pxlsize[0],probe_shape_pxlnb[0]*obj_pxlsize[1]
-probe_sigma_pxlnb = probe_shape_pxlnb[0]//(2*probe_sigma_ratio[0]),probe_shape_pxlnb[1]//(2*probe_sigma_ratio[1])
-probe_sigma_size = probe_sigma_pxlnb[0]*obj_pxlsize[0],probe_sigma_pxlnb[1]*obj_pxlsize[1]
+probe_shape_size = probe_shape_pxlnb[1]*obj_pxlsize[0],probe_shape_pxlnb[0]*obj_pxlsize[1]  # width height
+probe_sigma_pxlnb = probe_shape_pxlnb[1]//(2*probe_sigma_ratio[0]),probe_shape_pxlnb[0]//(2*probe_sigma_ratio[1]) # width height
+probe_sigma_size = probe_sigma_pxlnb[0]*obj_pxlsize[0],probe_sigma_pxlnb[1]*obj_pxlsize[1]  # width height
 print(f'probe_shape_pxlnb:{probe_shape_pxlnb}.')
 print(f'probe_shape_size is:{probe_shape_size[0]:.3e},{probe_shape_size[1]:.3e} meter.')
 print(f'probe_sigma_pxlnb:{probe_sigma_pxlnb}.')
@@ -739,7 +653,7 @@ fig2.savefig(path_probe_image)
 plt.show()
 
 # show scan
-fig3 = plt.figure()
+fig3 = plt.figure(tight_layout=True)
 grid = fig3.add_gridspec(6,9)
 
 # init obj as scan position background
@@ -767,7 +681,7 @@ ax32.imshow(np.abs(obj_pad),
             interpolation='nearest')
 
 # init camera background as diffraction pattern background
-ax33 = fig3.add_subplot(grid[2:,3:7])
+ax33 = fig3.add_subplot(grid[:,3:])
 ax33.set_title('background')
 ax33.set_xlabel('meter')
 ax33.set_ylabel('meter')
@@ -790,29 +704,9 @@ image33 = ax33.imshow(cam_bg,
                     extent=[0,obj_pxlnb_pad[1]*obj_pxlsize[0],0,obj_pxlnb_pad[0]*obj_pxlsize[1]],
                     cmap='Greys_r',
                     interpolation='nearest')
-
-fig_manager = plt.get_current_fig_manager()
-fig_manager.window.showMaximized()
-plt.pause(2)
-
-# add cross_line
-#add_cross(ax33)
-
-# init h-cross line
-h_ax = fig3.add_subplot(grid[0:2,3:7],sharex=ax33)
-h_ax.xaxis.set_tick_params(labelbottom=False)
-h_ax.set_ylim(top=1.05)
-h_ax.set_xlim(0,obj_pxlnb_pad[1]*obj_pxlsize[0])
-h_data = normalize_data(cam_bg[int(cam_bg.shape[0]/2),:])
-h_cross, = h_ax.plot(np.arange(cam_bg.shape[1]),h_data,'g-')
-
-# init v-cross line
-v_ax = fig3.add_subplot(grid[2:,7:],sharey=ax33)
-v_ax.yaxis.set_tick_params(labelleft=False)
-v_ax.set_xlim(right=1.05)
-v_ax.set_ylim(0,obj_pxlnb_pad[0]*obj_pxlsize[1])
-v_data = normalize_data(cam_bg[:,int(cam_bg.shape[1]/2)])
-v_cross, = v_ax.plot(v_data,np.arange(cam_bg.shape[0]), 'r-')
+cam_saturation = get_saturation(cam_bg,cam_bitdepth)
+saturation_txt = ax33.text(0.1, 0.9, f'{cam_saturation:.3} %', transform=ax33.transAxes,
+            color='w',fontweight='bold')
 plt.pause(2)
 
 # scan nb
@@ -831,6 +725,7 @@ colors = cm.rainbow(np.linspace(0, 1, new_scan_nb))
 # contour of the illumination area which were considered as non zero
 circ_radius = np.array(probe_sigma_size).min()*np.array(probe_sigma_ratio).min()
 
+cam_saturation = [] 
 for idx in range(new_scan_nb):
     # animation of scan position
     xi = scan_xposition_real[idx]
@@ -856,20 +751,26 @@ for idx in range(new_scan_nb):
                                 probe_bg_photonnb
                                 )
     ax33.set_title('scan'+str(idx))
-    image33.set_data(np.log10(intensity_temp))
-    plt.pause(1)
+    image33.set_data(intensity_temp)
 
-    # update cross section lines
-    v_data = normalize_data(np.log10(intensity_temp[:,int(intensity_temp.shape[1]/2)]))
-    h_data = normalize_data(np.log10(intensity_temp[int(intensity_temp.shape[0]/2),:]))
-    v_cross.set_xdata(v_data)
-    h_cross.set_ydata(h_data)
+    # show saturation
+    cam_saturation_i = get_saturation(intensity_temp,cam_bitdepth)
+    saturation_txt.set_text(f'{cam_saturation_i:.3} %')
+    cam_saturation.append(cam_saturation_i)
     # saving diffration pattern
     save_patterns(path_dir_diffraction,intensity_temp,idx)
     plt.pause(1)
 
+# save final image
 path_scan_image = path_dir_experiment + '\\scan_image.tiff'
 fig3.savefig(path_scan_image)
+
+# save saturation rate
+path_cam_saturation = path_dir_experiment+'\\cam_saturation.csv'
+with open(path_cam_saturation,'w+',newline='') as filecsv:
+    filecsv_writer=csv.writer(filecsv,delimiter=',')
+    for i in cam_saturation:
+        filecsv_writer.writerow([i])
 
 plt.pause(2)
 
