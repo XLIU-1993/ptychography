@@ -1,4 +1,5 @@
 from __future__ import division
+from operator import add
 # pynx
 from pynx.wavefront import Wavefront, PropagateNearField, PropagateFarField
 
@@ -9,10 +10,14 @@ import threading
 import numpy as np
 
 # Matplotlib
+import matplotlib
+matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
 from PIL import Image,ImageOps
 import matplotlib.cm as cm
 import matplotlib.patches as mpatches
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+import matplotlib.lines as lines
 
 # Saving files
 import os,sys,shutil,csv
@@ -72,7 +77,7 @@ obj_path_ampimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_
 obj_path_phaseimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype6_2.bmp'
 #obj_path_ampimage = 'G:\\PYNX\\Test\\sample_obj.tif'
 #obj_path_phaseimage = 'G:\\PYNX\\Test\\sample_phase.jpg'
-obj_size = (18e-6,13e-6) # meter
+obj_size = (18e-6,13e-6) # meter (xsize,ysize)
 obj_nearfield = False # True/Flase
 
 # cam info
@@ -83,7 +88,7 @@ the camera shape will influence the shape of gaussian,
 recommend to define an square shape camera, which will be less
 problematic.
 '''
-cam_pxlnb = (256,256)
+cam_pxlnb = (256,256) # (row_nb,column_nb)
 cam_binning = 1
 cam_qe = 0.02
 cam_dark_noise = 2.9 # e-
@@ -105,15 +110,20 @@ as long as the camera has an even shape, the probe_sigma_ratio should be
 identical for 2 sides, otherwise, to make a symetric gauss, the ratio should
 be calculated by considering the ratio of the camera shape.
 '''
-probe_sigma_ratio = (20,20)
-probe_max_photonnb =  1e4
-probe_bg_photonnb = 200
+probe_sigma_ratio = (4,4) #(x_ratio,y_ratio)
+probe_max_photonnb =  1e5
+probe_bg_photonnb = 20
 
 # scan info
 scan_type_list = ['rect','spiral'] # do not change
 scan_type = scan_type_list[0]
 '''
-scan_recover_ratio is define as the 
+scan_recover_ratio is define as the recovering ratio of the two
+matrix used to present the probe.
+if scan_recover_ratio is 0, it means that the two matrix are just
+not superposing. 
+if the scan_recover_ratio is 1, it means that the two matrix are
+on top of each other.
 scan_sigma_ratio*sigma_pxlnb.min() will be taken as scan_step_pxlnb.
     scan_recover_ratio          scan_sigma_ratio
             0                 2*probe_sigma_ratio.min()
@@ -129,24 +139,23 @@ scan_nb = 100
 ##########################################################################################
 def calc_obj_pxlsize(probe_wavelength,cam_obj_distance,cam_pxlnb,cam_pxlsize,nearfield):
     '''
-    return a tuple of obj_pxlsize
+    return a tuple of obj_pxlsize(xpxlsize,ypixelsize)
     '''
     if nearfield:
         obj_xpxlsize = cam_pxlsize
         obj_ypxlsize = cam_pxlsize
-
     else:
-        obj_xpxlsize = probe_wavelength*cam_obj_distance/(cam_pxlnb[0]*cam_pxlsize)
-        obj_ypxlsize = probe_wavelength*cam_obj_distance/(cam_pxlnb[1]*cam_pxlsize)
+        obj_xpxlsize = probe_wavelength*cam_obj_distance/(cam_pxlnb[1]*cam_pxlsize)
+        obj_ypxlsize = probe_wavelength*cam_obj_distance/(cam_pxlnb[0]*cam_pxlsize)
     obj_pxlsize = (obj_xpxlsize,obj_ypxlsize)
     return obj_pxlsize
 
 def calc_obj_pxlnb(obj_size,obj_pxlsize):
     '''
-    return a tuple of obj_pxlnb
+    return a tuple of obj_pxlnb (row_nb,column_nb)
     '''
-    obj_pxlnb = np.array((int(obj_size[0]//obj_pxlsize[0]),
-                        int(obj_size[1]//obj_pxlsize[1])))
+    obj_pxlnb = np.array((int(obj_size[1]//obj_pxlsize[1]),
+                        int(obj_size[0]//obj_pxlsize[0])))
     return obj_pxlnb
 
 def verify_array_memory(arrayshape,info='unknown'):
@@ -171,11 +180,11 @@ def read_obj_image(obj_path_list):
 
 def resize_obj_image(obj_image_list,obj_pxlnb):
     '''
-    return an list of resized images 
+    return an list of resized images, resize(column,row)
     '''
     obj_imageresize_list = []
     for obj_image in obj_image_list:
-        obj_imageresize_list.append(np.asarray(obj_image.resize((obj_pxlnb[0],obj_pxlnb[1]),resample=Image.BICUBIC)))
+        obj_imageresize_list.append(np.asarray(obj_image.resize((obj_pxlnb[1],obj_pxlnb[0]),resample=Image.NEAREST)))
     return obj_imageresize_list
 
 def make_obj(obj_image_list):
@@ -217,11 +226,11 @@ def make_probe_gauss(probe_shape_pxlnb,probe_sigma_ratio,center=(0,0)):
     return a circularly masked 2D gaussian electric field distribution without rotation, centered at (0,0)
     """
     probe_sigma_pxlnb = probe_shape_pxlnb[0]//(2*probe_sigma_ratio[0]),probe_shape_pxlnb[1]//(2*probe_sigma_ratio[1])
-    nx, ny = probe_shape_pxlnb
+    row, column = probe_shape_pxlnb
     v = np.array(probe_sigma_pxlnb) ** 2
 
-    x = np.linspace(-nx//2, nx//2, nx)
-    y = np.linspace(-ny//2, ny//2, ny)
+    x = np.linspace(-column//2, column//2, column)
+    y = np.linspace(-row//2, row//2, row)
     xx, yy = np.meshgrid(x, y)
 
     g = np.exp(-((xx-center[0])**2/(v[0])+(yy-center[1])**2/(v[1])))
@@ -234,73 +243,82 @@ def get_probe_gauss_intensity(probe_efield,probe_max_photonnb=1,probe_bg_photonn
     probe_ifield = probe_efield**2
     return (probe_ifield/probe_ifield.max())*probe_max_photonnb+probe_bg_photonnb
 
-def rect(pas,nb,obj_size):
+def rect(scan_step_pxlnb,scan_nb,obj_pxlnb):
     '''
     creat a matrix of the most possible rectangular, return
-    the x,y position sucessively.
+    the x,y positions sucessively. centered at 0.
     '''
-    obj_xpxlnb = obj_size[0]
-    obj_ypxlnb = obj_pxlnb[1]
+    ylength = obj_pxlnb[0] # row
+    xlength = obj_pxlnb[1] # column
 
-
-    
-    square_longth = int(np.sqrt(nb))
-    residu_nb = nb-square_longth**2
-    if residu_nb%square_longth == 0 :
-        xlongth = square_longth+residu_nb/square_longth
-    else:
-        xlongth = square_longth+residu_nb//square_longth+1
-    yaxis = np.arange(square_longth)
-    yaxis_reverse = np.flip(yaxis,0)
     current_nb = 0
-    xpos = 0
+    xpos = 0 
+    ypos = 0
     xcord = [] 
     ycord = []
-    while xpos<xlongth:
-        for ypos in yaxis:
-            if current_nb<nb:
-                xcord.append(xpos)
-                ycord.append(ypos)
+    while xpos*scan_step_pxlnb<=xlength:
+        while ypos*scan_step_pxlnb <=ylength:
+            if current_nb<scan_nb:
+                xcord.append(xpos*scan_step_pxlnb)
+                ycord.append(ypos*scan_step_pxlnb)
                 current_nb+=1
+                ypos+=1
+            else:
+                break
+        ypos-=1
         xpos+=1        
-        for ypos in yaxis_reverse:
-           if current_nb<nb:
-                xcord.append(xpos)
-                ycord.append(ypos)
+        while ypos*scan_step_pxlnb >=0:
+            if current_nb<scan_nb:
+                xcord.append(xpos*scan_step_pxlnb)
+                ycord.append(ypos*scan_step_pxlnb)
                 current_nb+=1
+                ypos-=1
+            else:
+                break
+        ypos+=1
         xpos+=1
-    xcord = np.array(xcord)*pas
-    ycord = np.array(ycord)*pas
-    xcord = xcord - int(xcord.mean())
-    ycord = ycord - int(ycord.mean())
+    xcord = np.array(xcord) - int(np.array(xcord).mean())
+    ycord = np.array(ycord) - int(np.array(ycord).mean())
     return xcord,ycord
 
-def spiral_archimedes(pas, nb):
-    """" Creates np points spiral of step pas, with pas between successive points
-    on the spiral. Returns the x,y coordinates of the spiral points.
+def spiral_archimedes(scan_step_pxlnb,scan_nb,obj_pxlnb):
+    """" Creates the most possible successive points on spiral with step of scan_step_pxlnb,
+    Returns the x,y coordinates of the spiral points.
 
     This is an Archimedes spiral. the equation is:
       r=(pas/2*pi)*theta
       the stepsize (radial distance between successive passes) is pas
       the curved absciss is: s(theta)=(pas/2*pi)*integral[t=0->theta](sqrt(1*t**2))dt
     """
+    ylength = obj_pxlnb[0] # row
+    xlength = obj_pxlnb[1] # column
     vr, vt = [0], [0]
     t = np.pi
-    while len(vr) < nb:
+    while len(vr) < scan_nb:
         vt.append(t)
-        vr.append(pas * t / (2 * np.pi))
+        vr.append(scan_step_pxlnb * t / (2 * np.pi))
         t += 2 * np.pi / np.sqrt(1 + t ** 2)
     vt, vr = np.array(vt), np.array(vr)
-    return np.round(vr * np.cos(vt)).astype(int), np.round(vr * np.sin(vt)).astype(int)
+    xcord_temp = (vr * np.cos(vt)).astype(int)
+    ycord_temp = (vr * np.sin(vt)).astype(int)
+    xcord = []
+    ycord = []
+    for idx,xcordi in enumerate(xcord_temp):
+        if xcordi <= xlength and ycord_temp[idx] <= ylength:
+            xcord.append(xcordi)
+            ycord.append(ycord_temp[idx])
+        else:
+            break
+    return xcord,ycord
 
-def make_scan(scan_type,scan_step_pxlnb,scan_nb):
+def make_scan(scan_type,scan_step_pxlnb,scan_nb,obj_pxlnb):
     '''
     return a tuple of (xpos,ypos)
     '''
     if scan_type == 'rect':
-        posx, posy = rect(scan_step_pxlnb,scan_nb)
+        posx, posy = rect(scan_step_pxlnb,scan_nb,obj_pxlnb)
     elif scan_type == 'spiral':
-        posx, posy = spiral_archimedes(scan_step_pxlnb,scan_nb)
+        posx, posy = spiral_archimedes(scan_step_pxlnb,scan_nb,obj_pxlnb)
     return posx,posy
 
 def align_scan_obj(scan_position,obj_pxlnb,obj_pxlnb_pad,obj_pxllim):
@@ -312,18 +330,14 @@ def align_scan_obj(scan_position,obj_pxlnb,obj_pxlnb_pad,obj_pxllim):
     the scanning position. In this case, there is no necessary to specify the real size of the obj.
     return: a tuple of aligned scan position
     '''
-    objxmid = obj_pxlnb_pad[0]//2
-    objymid = obj_pxlnb_pad[1]//2
+    objxmid = obj_pxlnb_pad[1]//2
+    objymid = obj_pxlnb_pad[0]//2
 
     scanxpos = scan_position[0]
     scanypos = scan_position[1]
-    scanxmid = (scanxpos.min()+scanxpos.max())//2
-    scanymid = (scanypos.min()+scanypos.max())//2
 
-    xtranslation = objxmid - scanxmid
-    ytranslation = objymid - scanymid
-    scanxpos = scanxpos+xtranslation
-    scanypos = scanypos+ytranslation
+    scanxpos = scanxpos+objxmid
+    scanypos = scanypos+objymid
 
     left,bottom = obj_pxllim
     right = left + obj_pxlnb[0]
@@ -336,9 +350,7 @@ def align_scan_obj(scan_position,obj_pxlnb,obj_pxlnb_pad,obj_pxllim):
             scanxpos_temp.append(scanxpos[idx])
             scanypos_temp.append(scanypos[idx])
         else:
-            print(f'probe exceed obj range at scan num.{idx}, corresponding pixel possion is({scanxpos[idx]},{scanypos[idx]}).')
-            print('scan point deleted.')
-            break
+            print(f'probe exceed obj range at scan num.{idx}')
 
     if len(scanxpos_temp)<=1:
         print(f'no scan falls into the obj, generate one scan at obj center:{objxmid},{objymid}')
@@ -507,6 +519,102 @@ class NumpyEncoder(json.JSONEncoder):
         elif isinstance(obj, np.ndarray):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
+
+class cross_lines():
+    '''
+    Build two cross lines in the middle of the given ax, and plot
+    two normalized cross sections. The cross lines are not pickable,
+    use firstly init_plot() to init the cross section plots, then
+    use update_data() to update the cross section data, plot can be updated
+    by calling ax.figure.canvas.draw_idle().
+    '''
+    def __init__(self,ax):
+        self.ax = ax
+        self.make_line()
+    
+    def make_line(self):
+        divider = make_axes_locatable(self.ax)
+        self.h_ax = divider.append_axes('top',0.2,pad=0.2,sharex=self.ax)
+        self.v_ax = divider.append_axes('right',0.2,pad=0.2,sharey=self.ax)
+        self.h_ax.xaxis.set_tick_params(labelbottom=False)
+        self.v_ax.yaxis.set_tick_params(labelleft=False)
+        self.h_ax.set_ylim(top=1.05)
+        self.v_ax.set_xlim(right=1.05)
+        xmin, xmax = self.ax.get_xlim()
+        ymin, ymax = self.ax.get_ylim()
+        h_mid = int((xmin + xmax)/2)
+        v_mid = int((ymin + ymax)/2)
+        h_line = lines.Line2D([xmin, xmax], 
+                            [h_mid, h_mid], 
+                            color='g', 
+                            linestyle='--', 
+                            pickradius=5)
+        self.ax.add_line(h_line)
+        v_line = lines.Line2D([v_mid, v_mid], 
+                            [ymin, ymax], 
+                            color='r', 
+                            linestyle='--',
+                            pickradius=5)
+        self.ax.add_line(v_line)
+    
+    def init_plot(self,data):
+        row,colunm = data.shape
+        v_data = data[:,int(colunm/2)]
+        v_data = self.normalize_data(v_data)
+        h_data = data[int(row/2),:]
+        h_data = self.normalize_data(h_data)
+        self.v_cross, = self.v_ax.plot(v_data,np.arange(row), 'r-')
+        self.h_cross, = self.h_ax.plot(np.arange(colunm),h_data,'g-')
+    
+    def update_data(self,data):
+        row,colunm = data.shape
+        v_data = data[:,int(colunm/2)]
+        v_data = self.normalize_data(v_data)
+        h_data = data[int(row/2),:]
+        h_data = self.normalize_data(h_data)
+        self.v_cross.set_xdata(v_data)
+        self.h_cross.set_ydata(h_data)
+
+    def normalize_data(self, data):
+        min_temp = np.min(data)
+        max_temp = np.max(data)
+        if min_temp != max_temp:
+            return (data-min_temp)/(max_temp-min_temp)
+        else:
+            return 1
+
+def add_cross(ax):
+    '''
+    add a cross at the center of the ax
+    '''
+    xmin, xmax = ax.get_xlim()
+    ymin, ymax = ax.get_ylim()
+    print(xmin, xmax)
+    h_mid = int((xmin + xmax)/2)
+    v_mid = int((ymin + ymax)/2)
+    h_line = lines.Line2D([xmin, xmax], 
+                        [h_mid, h_mid], 
+                        color='g', 
+                        linestyle='--')
+    ax.add_line(h_line)
+    v_line = lines.Line2D([v_mid, v_mid], 
+                        [ymin, ymax], 
+                        color='r', 
+                        linestyle='--')
+    ax.add_line(v_line)
+    ax.figure.canvas.draw_idle()
+
+def normalize_data(data):
+    '''
+    normalize line data from cross section.
+    '''
+    min_temp = np.min(data)
+    max_temp = np.max(data)
+    if min_temp != max_temp:
+        return (data-min_temp)/(max_temp-min_temp)
+    else:
+        return np.ones(len(data))
+
 ##########################################################################################
 # premairy calculations and verification
 ##########################################################################################
@@ -517,7 +625,7 @@ of np.array
 '''
 obj_pxlsize = calc_obj_pxlsize(probe_wavelength,cam_obj_distance,cam_pxlnb,cam_pxlsize,obj_nearfield) #meter
 obj_pxlnb = calc_obj_pxlnb(obj_size,obj_pxlsize)
-obj_size = obj_pxlsize[0]*obj_pxlnb[0],obj_pxlsize[1]*obj_pxlnb[1]
+obj_size = obj_pxlsize[0]*obj_pxlnb[1],obj_pxlsize[1]*obj_pxlnb[0]
 print(f'obj_pxlsize:{obj_pxlsize[0]:.3e},{obj_pxlsize[1]:.3e} meter.')
 print(f'obj_pxlnb:{obj_pxlnb}.')
 print(f'obj_size:{obj_size[0]:3e},{obj_size[1]:3e} meter.')
@@ -536,7 +644,7 @@ pad the obj
 '''
 obj_pad,obj_pxllim = pad_obj(obj,cam_pxlnb)
 obj_pxlnb_pad = obj_pad.shape
-obj_size_pad = obj_pxlsize[0]*obj_pxlnb_pad[0],obj_pxlsize[1]*obj_pxlnb_pad[1]
+obj_size_pad = obj_pxlsize[0]*obj_pxlnb_pad[1],obj_pxlsize[1]*obj_pxlnb_pad[0]
 print(f'obj_pxlnb_pad:{obj_pxlnb_pad}.')
 print(f'obj_size_pad:{obj_size_pad[0]:3e},{obj_size_pad[1]:3e} meter.')
 
@@ -545,7 +653,7 @@ print(f'obj_size_pad:{obj_size_pad[0]:3e},{obj_size_pad[1]:3e} meter.')
 calculate probe information
 '''
 probe_shape_pxlnb = cam_pxlnb
-probe_shape_size = probe_shape_pxlnb[0]*obj_pxlsize[0],probe_shape_pxlnb[1]*obj_pxlsize[1]
+probe_shape_size = probe_shape_pxlnb[1]*obj_pxlsize[0],probe_shape_pxlnb[0]*obj_pxlsize[1]
 probe_sigma_pxlnb = probe_shape_pxlnb[0]//(2*probe_sigma_ratio[0]),probe_shape_pxlnb[1]//(2*probe_sigma_ratio[1])
 probe_sigma_size = probe_sigma_pxlnb[0]*obj_pxlsize[0],probe_sigma_pxlnb[1]*obj_pxlsize[1]
 print(f'probe_shape_pxlnb:{probe_shape_pxlnb}.')
@@ -568,7 +676,7 @@ print(f'scan_step_size:{scan_step_size:.3e} meter.')
 
 if scan_step_pxlnb >= np.array(obj_pxlnb).min():
     print('obj is smaller than one scan step')
-scan_position = make_scan(scan_type,scan_step_pxlnb,scan_nb)
+scan_position = make_scan(scan_type,scan_step_pxlnb,scan_nb,obj_pxlnb)
 scan_position_align = align_scan_obj(scan_position,obj_pxlnb,obj_pxlnb_pad,obj_pxllim)
 
 # creat dir
@@ -584,7 +692,7 @@ ax11.set_ylabel('meter')
 ax11.ticklabel_format(axis='both',style='sci',scilimits=(-6,-6))
 amp_array =np.abs(obj)
 ax11.imshow(amp_array,
-            extent=[0,obj_pxlnb[0]*obj_pxlsize[0],0,obj_pxlnb[1]*obj_pxlsize[1]],
+            extent=[0,obj_pxlnb[1]*obj_pxlsize[0],0,obj_pxlnb[0]*obj_pxlsize[1]],
             cmap='Greys_r',
             interpolation='nearest')
 
@@ -595,7 +703,7 @@ ax12.set_ylabel('meter')
 ax12.ticklabel_format(axis='both',style='sci',scilimits=(-6,-6))
 phase_array = np.angle(obj)
 ax12.imshow(phase_array,
-            extent=[0,obj_pxlnb[0]*obj_pxlsize[0],0,obj_pxlnb[1]*obj_pxlsize[1]],
+            extent=[0,obj_pxlnb[1]*obj_pxlsize[0],0,obj_pxlnb[0]*obj_pxlsize[1]],
             cmap='Greys_r',
             interpolation='nearest')
 
@@ -612,7 +720,7 @@ ax21.set_xlabel('meter')
 ax21.set_ylabel('meter')
 ax21.ticklabel_format(axis='both',style='sci',scilimits=(-6,-6))
 ax21.imshow(probe_Ifield,
-            extent=[0,probe_shape_pxlnb[0]*obj_pxlsize[0],0,probe_shape_pxlnb[1]*obj_pxlsize[1]],
+            extent=[0,probe_shape_pxlnb[1]*obj_pxlsize[0],0,probe_shape_pxlnb[0]*obj_pxlsize[1]],
             cmap='Greys_r',
             interpolation='nearest')
 
@@ -622,7 +730,7 @@ ax22.set_xlabel('meter')
 ax22.set_ylabel('meter')
 ax22.ticklabel_format(axis='both',style='sci',scilimits=(-6,-6))
 ax22.imshow(np.log10(probe_Ifield),
-            extent=[0,probe_shape_pxlnb[0]*obj_pxlsize[0],0,probe_shape_pxlnb[1]*obj_pxlsize[1]],
+            extent=[0,probe_shape_pxlnb[1]*obj_pxlsize[0],0,probe_shape_pxlnb[0]*obj_pxlsize[1]],
             cmap='Greys_r',
             interpolation='nearest')
 
@@ -631,35 +739,35 @@ fig2.savefig(path_probe_image)
 plt.show()
 
 # show scan
-fig3 = plt.figure(tight_layout=True)
-grid = fig3.add_gridspec(2,3)
+fig3 = plt.figure()
+grid = fig3.add_gridspec(6,9)
 
 # init obj as scan position background
-ax31 = fig3.add_subplot(grid[0,0])
+ax31 = fig3.add_subplot(grid[0:3,0:3])
 ax31.set_title('scan position')
 ax31.set_xlabel('meter')
 ax31.set_ylabel('meter')
 ax31.ticklabel_format(axis='both',style='sci',scilimits=(-6,-6))
 
 ax31.imshow(np.abs(obj_pad),
-            extent=[0,obj_pxlnb_pad[0]*obj_pxlsize[0],0,obj_pxlnb_pad[1]*obj_pxlsize[1]],
+            extent=[0,obj_pxlnb_pad[1]*obj_pxlsize[0],0,obj_pxlnb_pad[0]*obj_pxlsize[1]],
             cmap='Greys_r',
             interpolation='nearest')
 
 # init obj as scan area background
-ax32 = fig3.add_subplot(grid[1,0])
+ax32 = fig3.add_subplot(grid[3:,0:3])
 ax32.set_title('scan area')
 ax32.set_xlabel('meter')
 ax32.set_ylabel('meter')
 ax32.ticklabel_format(axis='both',style='sci',scilimits=(-6,-6))
 
 ax32.imshow(np.abs(obj_pad),
-            extent=[0,obj_pxlnb_pad[0]*obj_pxlsize[0],0,obj_pxlnb_pad[1]*obj_pxlsize[1]],
+            extent=[0,obj_pxlnb_pad[1]*obj_pxlsize[0],0,obj_pxlnb_pad[0]*obj_pxlsize[1]],
             cmap='Greys_r',
             interpolation='nearest')
 
 # init camera background as diffraction pattern background
-ax33 = fig3.add_subplot(grid[:,1:])
+ax33 = fig3.add_subplot(grid[2:,3:7])
 ax33.set_title('background')
 ax33.set_xlabel('meter')
 ax33.set_ylabel('meter')
@@ -679,9 +787,32 @@ cam_bg = cam.applycamera(light=probe_bg)
 save_patterns(path_dir_experiment,cam_bg,'cam_bg')
 
 image33 = ax33.imshow(cam_bg,
-                    extent=[0,obj_pxlnb_pad[0]*obj_pxlsize[0],0,obj_pxlnb_pad[1]*obj_pxlsize[1]],
+                    extent=[0,obj_pxlnb_pad[1]*obj_pxlsize[0],0,obj_pxlnb_pad[0]*obj_pxlsize[1]],
                     cmap='Greys_r',
                     interpolation='nearest')
+
+fig_manager = plt.get_current_fig_manager()
+fig_manager.window.showMaximized()
+plt.pause(2)
+
+# add cross_line
+#add_cross(ax33)
+
+# init h-cross line
+h_ax = fig3.add_subplot(grid[0:2,3:7],sharex=ax33)
+h_ax.xaxis.set_tick_params(labelbottom=False)
+h_ax.set_ylim(top=1.05)
+h_ax.set_xlim(0,obj_pxlnb_pad[1]*obj_pxlsize[0])
+h_data = normalize_data(cam_bg[int(cam_bg.shape[0]/2),:])
+h_cross, = h_ax.plot(np.arange(cam_bg.shape[1]),h_data,'g-')
+
+# init v-cross line
+v_ax = fig3.add_subplot(grid[2:,7:],sharey=ax33)
+v_ax.yaxis.set_tick_params(labelleft=False)
+v_ax.set_xlim(right=1.05)
+v_ax.set_ylim(0,obj_pxlnb_pad[0]*obj_pxlsize[1])
+v_data = normalize_data(cam_bg[:,int(cam_bg.shape[1]/2)])
+v_cross, = v_ax.plot(v_data,np.arange(cam_bg.shape[0]), 'r-')
 plt.pause(2)
 
 # scan nb
@@ -697,7 +828,7 @@ with open(path_scan_position,'w+',newline='') as filecsv:
     filecsv_writer.writerows(zip(*scan_position_real)) 
 # displaying colors
 colors = cm.rainbow(np.linspace(0, 1, new_scan_nb))
-# contour of the illumination area
+# contour of the illumination area which were considered as non zero
 circ_radius = np.array(probe_sigma_size).min()*np.array(probe_sigma_ratio).min()
 
 for idx in range(new_scan_nb):
@@ -725,7 +856,14 @@ for idx in range(new_scan_nb):
                                 probe_bg_photonnb
                                 )
     ax33.set_title('scan'+str(idx))
-    image33.set_data(intensity_temp)
+    image33.set_data(np.log10(intensity_temp))
+    plt.pause(1)
+
+    # update cross section lines
+    v_data = normalize_data(np.log10(intensity_temp[:,int(intensity_temp.shape[1]/2)]))
+    h_data = normalize_data(np.log10(intensity_temp[int(intensity_temp.shape[0]/2),:]))
+    v_cross.set_xdata(v_data)
+    h_cross.set_ydata(h_data)
     # saving diffration pattern
     save_patterns(path_dir_diffraction,intensity_temp,idx)
     plt.pause(1)
