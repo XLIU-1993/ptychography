@@ -4,8 +4,8 @@ simulation based on pynx version-2020.02.02.
                                           xliu@imagine-optic.com
 '''
 from numpy.core.shape_base import block
-from pynx.ptycho import *
-from pynx.ptycho import simulation,shape
+from pynx2019.ptycho import *
+from pynx2019.ptycho import simulation,shape
 import numpy as np
 
 '''
@@ -23,31 +23,31 @@ IMPORTANT:
 '''
 
 # Path of the amplitude and the phase
-ampIm_path = 'D:\\scripts\\20210518_PyNx_essaie\\202150524_testatHome\\sample_obj.tif'
-phaseIm_path = 'D:\\scripts\\20210518_PyNx_essaie\\202150524_testatHome\\sample_phase.jpg'
+ampIm_path = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype2_reduite.bmp'
+phaseIm_path = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype6_2.bmp'
 
-wavelength = 2e-9 # (meter)
+wavelength = 420e-9 # (meter)
 
 # Camera
-cam_pxl_nb = 128  # detector pixel number
-cam_pxl_size =  13e-6 # size of a single pixel of the camera (meter)
-cam_obj_distance = 0.02 # distance between camera and object(meter)
+cam_pxl_nb = 256  # detector pixel number
+cam_pxl_size =  52e-6 # size of a single pixel of the camera (meter)
+cam_obj_distance = 339e-6 # distance between camera and object(meter)
 
 # Object
 obj_pxl_nb = 256 # object pixel number
 obj_pxl_size = wavelength*cam_obj_distance/cam_pxl_size/cam_pxl_nb # size of single pixel in the object plane (meter)
 
 # Probe
-probe_size = 0.5e-6 # Probe radius at 1/e^2 (meter)
-scan_step_size = probe_size # Scan step (meter)
+probe_size = 4.492e-07 # Probe radius at 1/e^2 (meter)
+scan_step_size = 5.391e-07 # Scan step (meter)
 nb_scan = 200 # Number of scan
 
 # Algorithm
-nb_iteration = 200
-use_DM = False
+nb_iteration = 100
+use_DM = True
 use_AP = False
 use_ML = False
-ExportData = True
+ExportData = False
 
 
 '''
@@ -160,7 +160,12 @@ print('************************************************')
 ######################################################
 # Simulate the dataset of an experiment:
 ######################################################
-data_simulation = simulation.Simulation(obj=obj_complexe,obj_info=obj_info,probe_info=probe_info,scan=scan_pattern,scan_info=scan_info, data_info=data_info)
+data_simulation = simulation.Simulation(obj=obj_complexe,
+                                        obj_info=obj_info,
+                                        probe_info=probe_info,
+                                        scan=scan_pattern,
+                                        scan_info=scan_info,
+                                        data_info=data_info)
 data_simulation.make_data()
 
 scan_positions_x,scan_positions_y = data_simulation.scan.values
