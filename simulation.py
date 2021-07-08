@@ -73,15 +73,15 @@ path_dir_working = sys.path[0]
 if only one path was given, it will generate a pure phase obj,
 in this case leave other path as 'None'
 '''
-#obj_path_ampimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype2_reduite.bmp'
-#obj_path_phaseimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype6_2.bmp'
-obj_path_ampimage = 'G:\\PYNX\\Test\\sample_obj.tif'
-obj_path_phaseimage = 'G:\\PYNX\\Test\\sample_phase.jpg'
+obj_path_ampimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype2_reduite.bmp'
+obj_path_phaseimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype6_2.bmp'
+#obj_path_ampimage = 'G:\\PYNX\\Test\\sample_obj.tif'
+#obj_path_phaseimage = 'G:\\PYNX\\Test\\sample_phase.jpg'
 obj_size = (18e-6,13e-6) # meter (xsize,ysize)
 obj_nearfield = False # True/Flase
 
 # cam info
-cam_obj_distance = 339e-6 # meter
+cam_obj_distance = 2.028e-3 # meter
 cam_pxlsize = 52e-6 # meter
 '''
 the camera shape will influence the shape of gaussian,
@@ -95,7 +95,7 @@ cam_dark_noise = 2.9 # e-
 cam_dark_current = 3e-4 # e-/pixe/s
 cam_sensitivity = 1
 cam_bitdepth = 16
-cam_baseline = 100
+cam_baseline = 50
 
 # probe info
 probe_type_list = ['guass'] # do not change
@@ -110,8 +110,8 @@ as long as the camera has an even shape, the probe_sigma_ratio should be
 identical for 2 sides, otherwise, to make a symetric gauss, the ratio should
 be calculated by considering the ratio of the camera shape.
 '''
-probe_sigma_ratio = (4,4) #(x_ratio,y_ratio)
-probe_max_photonnb =  1e6
+probe_sigma_ratio = (3,3) #(x_ratio,y_ratio)
+probe_max_photonnb =  1e5
 probe_bg_photonnb = 20
 
 # scan info
@@ -130,9 +130,9 @@ scan_sigma_ratio*sigma_pxlnb.min() will be taken as scan_step_pxlnb.
             0.5               1*probe_sigma_ratio.min()
             1                 0*probe_sigma_ratio.min()
 '''
-scan_recover_ratio = 0.60 # 0-1
+scan_recover_ratio = 0.92 # 0-1
 scan_sigma_ratio = (1-scan_recover_ratio)/0.5*np.array(probe_sigma_ratio).min()
-scan_nb = 10
+scan_nb = 100
 
 ##########################################################################################
 # define functions
@@ -250,14 +250,23 @@ def rect(scan_step_pxlnb,scan_nb,obj_pxlnb):
     '''
     ylength = obj_pxlnb[0] # row
     xlength = obj_pxlnb[1] # column
+    total_pxl = xlength*ylength # total number
+    total_scanpxl = scan_nb*scan_step_pxlnb
+    if total_scanpxl >  total_pxl:
+        total_scanpxl = total_pxl
+    
+    scan_nb = int(total_scanpxl/scan_step_pxlnb)
+    ratio = np.sqrt(total_scanpxl/total_pxl)
+    scan_rownb = int(ylength*ratio)
+    scan_column = int(xlength*ratio)
 
     current_nb = 0
     xpos = 0 
     ypos = 0
     xcord = [] 
     ycord = []
-    while xpos*scan_step_pxlnb<=xlength:
-        while ypos*scan_step_pxlnb <=ylength:
+    while xpos*scan_step_pxlnb<=scan_column:
+        while ypos*scan_step_pxlnb <=scan_rownb:
             if current_nb<scan_nb:
                 xcord.append(xpos*scan_step_pxlnb)
                 ycord.append(ypos*scan_step_pxlnb)
@@ -309,7 +318,7 @@ def spiral_archimedes(scan_step_pxlnb,scan_nb,obj_pxlnb):
             ycord.append(ycord_temp[idx])
         else:
             break
-    return xcord,ycord
+    return np.array(xcord),np.array(ycord)
 
 def make_scan(scan_type,scan_step_pxlnb,scan_nb,obj_pxlnb):
     '''
@@ -350,7 +359,7 @@ def align_scan_obj(scan_position,obj_pxlnb,obj_pxlnb_pad,obj_pxllim):
             scanxpos_temp.append(scanxpos[idx])
             scanypos_temp.append(scanypos[idx])
         else:
-            print(f'probe exceed obj range at scan num.{idx}')
+            break
 
     if len(scanxpos_temp)<=1:
         print(f'no scan falls into the obj, generate one scan at obj center:{objxmid},{objymid}')
@@ -379,6 +388,8 @@ def make_dir(path_dir_working):
                     shutil.rmtree(file_path)
             except Exception as e:
                 print('Failed to delete %s. Reason: %s' % (file_path, e))
+        for folder_path in folder_list[1:]:
+            os.mkdir(folder_path)
     else:
         for folder_path in folder_list:
             os.mkdir(folder_path)
