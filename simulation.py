@@ -251,11 +251,11 @@ def rect(scan_step_pxlnb,scan_nb,obj_pxlnb):
     ylength = obj_pxlnb[0] # row
     xlength = obj_pxlnb[1] # column
     total_pxl = xlength*ylength # total number
-    total_scanpxl = scan_nb*scan_step_pxlnb
+    total_scanpxl = scan_nb*scan_step_pxlnb**2
     if total_scanpxl >  total_pxl:
         total_scanpxl = total_pxl
     
-    scan_nb = int(total_scanpxl/scan_step_pxlnb)
+    scan_nb = int(total_scanpxl/scan_step_pxlnb**2)
     ratio = np.sqrt(total_scanpxl/total_pxl)
     scan_rownb = int(ylength*ratio)
     scan_column = int(xlength*ratio)
