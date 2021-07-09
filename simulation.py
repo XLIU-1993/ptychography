@@ -372,10 +372,12 @@ def make_dir(path_dir_working):
     path_dir_simulation = path_dir_working+'\\'+current_time+'_ptycho_simulation'
     path_dir_experiment = path_dir_simulation+'\\simulation_info'
     path_dir_diffraction = path_dir_simulation+'\\diffraction_patterns'
+    path_dir_scanning = path_dir_experiment+'\\scanning'
     folder_list = [
                     path_dir_simulation,
                     path_dir_experiment,
-                    path_dir_diffraction
+                    path_dir_diffraction,
+                    path_dir_scanning
                     ]
     if os.path.exists(path_dir_simulation):
         print('simulation dir exist, clearing...')
@@ -393,7 +395,7 @@ def make_dir(path_dir_working):
     else:
         for folder_path in folder_list:
             os.mkdir(folder_path)
-    return path_dir_simulation,path_dir_experiment,path_dir_diffraction
+    return path_dir_simulation,path_dir_experiment,path_dir_diffraction,path_dir_scanning
 
 
 def save_fromarray(array,path_dir_experiment,imagetitle):
@@ -520,6 +522,10 @@ def save_patterns(path,intensity_temp,name):
                             mode='I;16')
     imagei.save(file,'tiff')
 
+def save_scanning(path,fig,name):
+    file = path+'\\'+str(name)+'.png'
+    fig.savefig(file)
+
 class NumpyEncoder(json.JSONEncoder):
     """ Special json encoder for numpy types """
     def default(self, obj):
@@ -605,7 +611,7 @@ scan_position = make_scan(scan_type,scan_step_pxlnb,scan_nb,obj_pxlnb)
 scan_position_align = align_scan_obj(scan_position,obj_pxlnb,obj_pxlnb_pad,obj_pxllim)
 
 # creat dir
-path_dir_simulation,path_dir_experiment,path_dir_diffraction = make_dir(path_dir_working)
+path_dir_simulation,path_dir_experiment,path_dir_diffraction,path_dir_scanning = make_dir(path_dir_working)
 
 # show obj
 fig1 = plt.figure(tight_layout=True)
@@ -761,20 +767,22 @@ for idx in range(new_scan_nb):
                                 probe_max_photonnb,
                                 probe_bg_photonnb
                                 )
-    ax33.set_title('scan'+str(idx))
+    ax33.set_title('scan '+str(idx+1))
     image33.set_data(intensity_temp)
 
     # show saturation
     cam_saturation_i = get_saturation(intensity_temp,cam_bitdepth)
     saturation_txt.set_text(f'{cam_saturation_i:.3} %')
     cam_saturation.append(cam_saturation_i)
+
     # saving diffration pattern
-    save_patterns(path_dir_diffraction,intensity_temp,idx)
+    save_patterns(path_dir_diffraction,intensity_temp,idx+1)
+
+    # save scanning image
+    save_scanning(path_dir_scanning,fig3,idx+1)
     plt.pause(1)
 
-# save final image
-path_scan_image = path_dir_experiment + '\\scan_image.tiff'
-fig3.savefig(path_scan_image)
+
 
 # save saturation rate
 path_cam_saturation = path_dir_experiment+'\\cam_saturation.csv'
