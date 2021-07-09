@@ -1,10 +1,10 @@
 from __future__ import division
 
 # ptycho
-from pynx2019.ptycho import*
+from pynx.ptycho import*
 
 # read save files
-import os,sys,json
+import os,sys,json,shutil
 import csv
 from PIL import Image
 
@@ -100,11 +100,61 @@ def calc_obj_pxlnb(posx, posy, cam_pxlnb):
     nx = int(2 * (abs(np.ceil(posx)) + 4).max() + cam_pxlnb[1])
     return ny, nx
 
+def make_dir_reconstruction(path_dir_simulation):
+    '''
+    build reconstruction folder underneath the simulation folder,
+    if the reconstruction folder already existed, the content will be
+    cleared.
+    '''
+    current_time = time.strftime("%Y%m%d%H%M",time.localtime())
+    path_dir_recon = path_dir_simulation+'\\'+current_time+'_reconstuction'
+    path_dir_recon_result = path_dir_recon+'\\reconstruction'
+    folder_list = [
+                    path_dir_recon,
+                    path_dir_recon_result
+                    ]
+    if os.path.exists(path_dir_recon):
+        print(f'{path_dir_recon} exist, clearing...')
+        for filename in os.listdir(path_dir_recon):
+            file_path = os.path.join(path_dir_recon, filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.unlink(file_path)
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+            except Exception as e:
+                print('Failed to delete %s. Reason: %s' % (file_path, e))
+        for folder_path in folder_list[1:]:
+            os.mkdir(folder_path)
+    else:
+        for folder_path in folder_list:
+            os.mkdir(folder_path)
+    return path_dir_recon,path_dir_recon_result
+
+class NumpyEncoder(json.JSONEncoder):
+    """ Special json encoder for numpy types """
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
 ##########################################################################################
 # import simulationd data
 ##########################################################################################
+# reconstruction log
+txt_readme ='''
+This is the first scrit that willed be used to  
+simulate helix ptycho simulation.
+The logics seems to be good.
+'''  # DEFINE
+
 # give simulation directory
-path_dir_simulation = r'D:\scripts\ptychography\202107081707_ptycho_simulation' # DEFINE
+path_dir_simulation = r'D:\scripts\ptychography\202107091350_ptycho_simulation' # DEFINE
+path_dir_recon,path_dir_recon_result = make_dir_reconstruction(path_dir_simulation)
+
 # auto fill directory
 path_dir_experiment = path_dir_simulation+'\\simulation_info'
 path_dir_diffraction = path_dir_simulation+'\\diffraction_patterns'
@@ -119,14 +169,12 @@ with open(path_simulation_info,'r') as f:
 
 # read scan position info
 scan_position = get_scan(path_scan_position)
-print('scan nb',len(scan_position[0]))
 
 # read cam_bg
 cam_bg = get_background(path_cam_bg)
 
 # read diffraction pattern
 intensity = get_diffraction_patterns(path_dir_diffraction)
-
 
 ##########################################################################################
 # set parameters for known cam_obj_distance
@@ -158,7 +206,13 @@ obj_pxlnb_pad = calc_obj_pxlnb(scan_position[0]/obj_pxlsize[0],
                                 scan_position[1]/obj_pxlsize[1],
                                 cam_pxlnb)
 
+obj_size_pad = obj_pxlsize[0]*obj_pxlnb_pad[1],obj_pxlsize[1]*obj_pxlnb_pad[0] # width height
+
 obj_init = make_random_obj(obj_pxlnb_pad)
+
+print(f'obj_pxlsize:{obj_pxlsize[0]:.3e},{obj_pxlsize[1]:.3e} meter.')
+print(f'obj_pxlnb_pad:{obj_pxlnb_pad[0]},{obj_pxlnb_pad[1]}.')
+print(f'obj_size_pad:{obj_size_pad[0]:.3e},{obj_size_pad[1]:.3e} meter.')
 
 # probe
 probe_shape_pxlnb = cam_pxlnb
@@ -186,7 +240,8 @@ p_data = PtychoData(iobs=intensity,
                     positions=(np.array(scan_position[0]),np.array(scan_position[1])), 
                     detector_distance=cam_obj_distance, 
                     pixel_size_detector=cam_pxlsize, 
-                    wavelength=probe_wavelength)
+                    wavelength=probe_wavelength,
+                    path_result=path_dir_recon_result)
 
 p = Ptycho(probe=probe_Efield_init,
             obj=obj_init, 
@@ -201,6 +256,37 @@ if do_dm:
 if do_ap:
     p = AP(update_object=True, update_probe=True, calc_llk=5, show_obj_probe=5) ** iteration_nb * p
 
+dict_objinfo_sup={
+    'obj_pxlsize':obj_pxlsize,
+    'obj_pxlnb_pad':obj_pxlnb_pad,
+    'obj_size_pad':obj_size_pad
+}
 
+dict_probeinfo={
+    'probe_sigma_ratio':probe_sigma_ratio
+}
 
+dict_probeinfo_sup={
+    'probe_shape_size':probe_shape_size, # meter
+    'probe_sigma_pxlnb':probe_sigma_pxlnb, # np.array((None,None))
+    'probe_sigma_size':probe_sigma_size, # meter np.array((None,None))
+}
 
+dict_reconinfo={
+    'obj_info_sup':dict_objinfo_sup,
+    'probe_info':dict_probeinfo,
+    'probe_info_sup':dict_probeinfo_sup
+}
+
+# save reconstruction info
+path_recon_info = path_dir_recon+'\\reconstruction_info.txt'
+txtfile = open(path_recon_info,'w+') 
+txt_reconinfo = json.dumps(dict_reconinfo,cls=NumpyEncoder)
+txtfile.write(txt_reconinfo)
+txtfile.close()
+
+# save readme
+path_readme = path_dir_recon+'\\readme.txt'
+txtfile = open(path_readme,'w+') 
+txtfile.write(txt_readme)
+txtfile.close()
