@@ -367,7 +367,7 @@ def align_scan_obj(scan_position,obj_pxlnb,obj_pxlnb_pad,obj_pxllim):
         scanypos_temp.append(objymid)      
     return scanxpos_temp,scanypos_temp
 
-def make_dir(path_dir_working):
+def make_dir_simu(path_dir_working):
     current_time = time.strftime("%Y%m%d%H%M",time.localtime())
     path_dir_simulation = path_dir_working+'\\'+current_time+'_ptycho_simulation'
     path_dir_experiment = path_dir_simulation+'\\simulation_info'
@@ -396,7 +396,6 @@ def make_dir(path_dir_working):
         for folder_path in folder_list:
             os.mkdir(folder_path)
     return path_dir_simulation,path_dir_experiment,path_dir_diffraction,path_dir_scanning
-
 
 def save_fromarray(array,path_dir_experiment,imagetitle):
     '''
@@ -611,7 +610,7 @@ scan_position = make_scan(scan_type,scan_step_pxlnb,scan_nb,obj_pxlnb)
 scan_position_align = align_scan_obj(scan_position,obj_pxlnb,obj_pxlnb_pad,obj_pxllim)
 
 # creat dir
-path_dir_simulation,path_dir_experiment,path_dir_diffraction,path_dir_scanning = make_dir(path_dir_working)
+path_dir_simulation,path_dir_experiment,path_dir_diffraction,path_dir_scanning = make_dir_simu(path_dir_working)
 
 # show obj
 fig1 = plt.figure(tight_layout=True)
@@ -780,7 +779,7 @@ for idx in range(new_scan_nb):
 
     # save scanning image
     save_scanning(path_dir_scanning,fig3,idx+1)
-    plt.pause(1)
+    plt.pause(0.5)
 
 
 
