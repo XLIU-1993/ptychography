@@ -1,1 +1,0 @@
-{"obj_info_sup": {"obj_pxlsize": [6.3984375e-08, 6.3984375e-08], "obj_pxlnb_pad": [426, 466], "obj_size_pad": [2.9816718749999998e-05, 2.725734375e-05]}, "probe_info": {"probe_sigma_ratio": [3, 3]}, "probe_info_sup": {"probe_shape_size": [1.638e-05, 1.638e-05], "probe_sigma_pxlnb": [42, 42], "probe_sigma_size": [2.6873437499999998e-06, 2.6873437499999998e-06]}}
