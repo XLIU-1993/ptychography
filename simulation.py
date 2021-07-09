@@ -368,6 +368,10 @@ def align_scan_obj(scan_position,obj_pxlnb,obj_pxlnb_pad,obj_pxllim):
     return scanxpos_temp,scanypos_temp
 
 def make_dir_simu(path_dir_working):
+    '''
+    build a simulation folder, if the folder existed already, the folder
+    will be cleared.
+    '''
     current_time = time.strftime("%Y%m%d%H%M",time.localtime())
     path_dir_simulation = path_dir_working+'\\'+current_time+'_ptycho_simulation'
     path_dir_experiment = path_dir_simulation+'\\simulation_info'
