@@ -39,16 +39,9 @@ def make_random_obj(obj_pxlnb):
     obj = np.random.uniform(0,1,obj_pxlnb) * np.exp(1j * rand_phase)    
     return obj
 
-def center_scan(posx,posy):
-    posx = np.array(posx)
-    posy = np.array(posy)
-    posx = posx - posx.mean()
-    posy = posy - posy.mean()
-    return (posx,posy)
-
 def get_scan(path_scan_position):
     '''
-    return scan_position.
+    return scan_position, pynx will center scan positions at 0,0 later.
     '''
     posx = []
     posy = []
@@ -56,8 +49,8 @@ def get_scan(path_scan_position):
         scan_reader = csv.reader(f)
         for row in scan_reader:
             posx.append(float(row[0]))
-            posy.append(float(row[1]))
-    scan_position = center_scan(posx,posy)
+            posy.append(float(row[1]))    
+    scan_position = (np.array(posx),np.array(posy))
     return scan_position
 
 def get_background(path_cam_bg):
@@ -152,7 +145,7 @@ The logics seems to be good.
 '''  # DEFINE
 
 # give simulation directory
-path_dir_simulation = r'D:\scripts\ptychography\202107091350_ptycho_simulation' # DEFINE
+path_dir_simulation = r'G:\PYNX\ptychography\202107120332_ptycho_simulation' # DEFINE
 path_dir_recon,path_dir_recon_result = make_dir_reconstruction(path_dir_simulation)
 
 # auto fill directory
@@ -175,7 +168,6 @@ cam_bg = get_background(path_cam_bg)
 
 # read diffraction pattern
 intensity = get_diffraction_patterns(path_dir_diffraction)
-
 ##########################################################################################
 # set parameters for known cam_obj_distance
 ##########################################################################################
@@ -237,7 +229,7 @@ do_dm = True #DEFINE
 do_ap = False #DEFINE
 
 p_data = PtychoData(iobs=intensity, 
-                    positions=(np.array(scan_position[0]),np.array(scan_position[1])), 
+                    positions=(scan_position[0],scan_position[1]), 
                     detector_distance=cam_obj_distance, 
                     pixel_size_detector=cam_pxlsize, 
                     wavelength=probe_wavelength,
