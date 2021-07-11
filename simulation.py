@@ -16,8 +16,6 @@ import matplotlib.pyplot as plt
 from PIL import Image,ImageOps
 import matplotlib.cm as cm
 import matplotlib.patches as mpatches
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-import matplotlib.lines as lines
 
 # Saving files
 import os,sys,shutil,csv
@@ -73,10 +71,10 @@ path_dir_working = sys.path[0]
 if only one path was given, it will generate a pure phase obj,
 in this case leave other path as 'None'
 '''
-obj_path_ampimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype2_reduite.bmp'
-obj_path_phaseimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype6_2.bmp'
-#obj_path_ampimage = 'G:\\PYNX\\Test\\sample_obj.tif'
-#obj_path_phaseimage = 'G:\\PYNX\\Test\\sample_phase.jpg'
+#obj_path_ampimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype2_reduite.bmp'
+#obj_path_phaseimage = 'D:\\scripts\\20210416_PyNx\\20210528_DongTycho\\Simulation_David\\prototype6_2.bmp'
+obj_path_ampimage = 'G:\\PYNX\\Test\\sample_obj.tif'
+obj_path_phaseimage = 'G:\\PYNX\\Test\\sample_phase.jpg'
 obj_size = (18e-6,13e-6) # meter (xsize,ysize)
 obj_nearfield = False # True/Flase
 
@@ -111,7 +109,7 @@ identical for 2 sides, otherwise, to make a symetric gauss, the ratio should
 be calculated by considering the ratio of the camera shape.
 '''
 probe_sigma_ratio = (3,3) #(x_ratio,y_ratio)
-probe_max_photonnb =  1e5
+probe_max_photonnb =  1e7
 probe_bg_photonnb = 20
 
 # scan info
@@ -197,6 +195,7 @@ def make_obj(obj_image_list):
         amp = 1
         phase = obj_image_list[0]
     else:
+        obj_image_list[0] = obj_image_list[0]-obj_image_list[0].min()
         amp = obj_image_list[0]/obj_image_list[0].max()
         phase = obj_image_list[1]
     phase = phase-phase.min()
@@ -484,14 +483,30 @@ class cameraADconvertor():
         self.light[self.light>max_depth] = max_depth
 
 def make_edffraction(obj_pad,probe_Efield,scan_position_align):
+    '''
+    keep in mind that the np.array is presented as (row,column),
+    however the image is presented as (width,height).
+    array left top is 0,0, however scan right bottom is 0,0
+    '''
     obj_rowpxlnb,obj_colunmpxlnb = obj_pad.shape
-    probe_shape_xpxlnb,probe_shape_ypxlnb = probe_Efield.shape
-    scan_xposition, scan_yposition = scan_position_align
-    x0 = int(scan_xposition-probe_shape_ypxlnb//2)
-    y0 = int(scan_yposition-probe_shape_xpxlnb//2)
-    if x0<0 or y0<0 or x0+probe_shape_ypxlnb>obj_colunmpxlnb or y0+probe_shape_xpxlnb>obj_rowpxlnb:
-        print('OVER RANGE at scan position(pixels):',scan_xposition,scan_yposition)
-    return probe_Efield*obj_pad[y0:y0+probe_shape_xpxlnb,x0:x0+probe_shape_ypxlnb]
+    probe_rowpxlnb,probe_colunmpxlnb = probe_Efield.shape
+    scanx, scany = scan_position_align
+    x0 = int(scanx-probe_colunmpxlnb//2)
+    y0 = int(scany-probe_rowpxlnb//2)
+    if y0<0 or x0<0 or y0+probe_rowpxlnb>obj_rowpxlnb or x0+probe_colunmpxlnb>obj_colunmpxlnb:
+        print('OVER RANGE at scan position(pixels):',scanx,scany)
+    if False:
+        '''
+        This part is used to check the product of probe and obj is correct.
+        '''
+        fig = plt.figure()
+        ax1 = fig.add_subplot(211)
+        ax1.imshow(abs(obj_pad),extent=[obj_colunmpxlnb,0,0,obj_rowpxlnb])
+        ax1.scatter(scanx,scany)
+        ax2 = fig.add_subplot(212)
+        ax2.imshow(abs(obj_pad[y0:y0+probe_rowpxlnb,x0:x0+probe_colunmpxlnb]))
+        plt.pause(1)
+    return probe_Efield*obj_pad[y0:y0+probe_rowpxlnb,x0:x0+probe_colunmpxlnb]
 
 def make_diffration(obj_pad,
                     probe_Efield,
@@ -684,7 +699,7 @@ ax31.set_ylabel('meter')
 ax31.ticklabel_format(axis='both',style='sci',scilimits=(-6,-6))
 
 ax31.imshow(np.abs(obj_pad),
-            extent=[0,obj_pxlnb_pad[1]*obj_pxlsize[0],0,obj_pxlnb_pad[0]*obj_pxlsize[1]],
+            extent=[obj_pxlnb_pad[1]*obj_pxlsize[0],0,0,obj_pxlnb_pad[0]*obj_pxlsize[1]],
             cmap='Greys_r',
             interpolation='nearest')
 
@@ -696,7 +711,7 @@ ax32.set_ylabel('meter')
 ax32.ticklabel_format(axis='both',style='sci',scilimits=(-6,-6))
 
 ax32.imshow(np.abs(obj_pad),
-            extent=[0,obj_pxlnb_pad[1]*obj_pxlsize[0],0,obj_pxlnb_pad[0]*obj_pxlsize[1]],
+            extent=[obj_pxlnb_pad[1]*obj_pxlsize[0],0,0,obj_pxlnb_pad[0]*obj_pxlsize[1]],
             cmap='Greys_r',
             interpolation='nearest')
 
@@ -721,12 +736,14 @@ cam_bg = cam.applycamera(light=probe_bg)
 save_patterns(path_dir_experiment,cam_bg,'cam_bg')
 
 image33 = ax33.imshow(cam_bg,
-                    extent=[0,obj_pxlnb_pad[1]*obj_pxlsize[0],0,obj_pxlnb_pad[0]*obj_pxlsize[1]],
+                    extent=[obj_pxlnb_pad[1]*obj_pxlsize[0],0,0,obj_pxlnb_pad[0]*obj_pxlsize[1]],
                     cmap='Greys_r',
-                    interpolation='nearest')
+                    interpolation='nearest',
+                    vmin=0,
+                    vmax=2**cam_bitdepth-1)
 cam_saturation = get_saturation(cam_bg,cam_bitdepth)
 saturation_txt = ax33.text(0.1, 0.9, f'{cam_saturation:.3} %', transform=ax33.transAxes,
-            color='w',fontweight='bold')
+            color='r',fontweight='bold')
 plt.pause(2)
 
 # scan nb
