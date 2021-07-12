@@ -504,9 +504,9 @@ def make_edffraction(obj_pad,probe_Efield,scan_position_align):
         ax1.imshow(abs(obj_pad),extent=[obj_colunmpxlnb,0,0,obj_rowpxlnb])
         ax1.scatter(scanx,scany)
         ax2 = fig.add_subplot(212)
-        ax2.imshow(abs(obj_pad[y0:y0+probe_rowpxlnb,x0:x0+probe_colunmpxlnb]))
+        ax2.imshow(abs(obj_pad[-(y0+probe_rowpxlnb):-y0,-(x0+probe_colunmpxlnb):-x0]))
         plt.pause(1)
-    return probe_Efield*obj_pad[y0:y0+probe_rowpxlnb,x0:x0+probe_colunmpxlnb]
+    return probe_Efield*obj_pad[-(y0+probe_rowpxlnb):-y0,-(x0+probe_colunmpxlnb):-x0]
 
 def make_diffration(obj_pad,
                     probe_Efield,
