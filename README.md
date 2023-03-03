@@ -16,5 +16,4 @@ with reconstruction.
 Noted that these code were wrote for my personal perpose, I'm just starting code in python. So don't hesite to contact me and
 give some advises. Thanks!
 
-Xu LIU
-jasonlx1993@gmail.com
+
